@@ -1,0 +1,22 @@
+# Findr
+node_modules
+dist
+.expo
+.expo-shared
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build
+.env
+.env.local
+
+# OS / IDE
+.DS_Store
+.idea
+.vscode
+
+# Metro
+.metro-health-check*

@@ -1,5 +1,9 @@
 /** Auth domain helpers (age gate, session mapping). */
-export function yearsSince(dobIso: string, now = new Date()): number | null {
+export function yearsSince(
+  dobIso: string | null | undefined,
+  now = new Date(),
+): number | null {
+  if (!dobIso) return null;
   const dob = new Date(dobIso);
   if (Number.isNaN(dob.getTime())) return null;
   let age = now.getFullYear() - dob.getFullYear();

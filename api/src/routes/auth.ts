@@ -2,11 +2,8 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 
 import { isAdult } from '../modules/auth/ageGate.js';
-import {
-  bearerToken,
-  signAccessToken,
-  verifyAccessToken,
-} from '../modules/auth/jwt.js';
+import { signAccessToken } from '../modules/auth/jwt.js';
+import { requireAuth } from '../modules/auth/requireAuth.js';
 import {
   getUserStore,
   toPublic,
@@ -16,7 +13,12 @@ import {
 const signupSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
-  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  /** Optional — when omitted, acceptedAgeGate must be true (MVP). */
+  dateOfBirth: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  acceptedAgeGate: z.literal(true),
   tosAccepted: z.literal(true),
   privacyAccepted: z.literal(true),
 });
@@ -32,7 +34,7 @@ function errorCode(err: unknown): string | undefined {
 
 /**
  * MVP email/password auth with JWT.
- * Hard gate: DOB → 18+ before creating an account.
+ * Hard gate: acceptedAgeGate (18+ attestation). Optional DOB still validated if sent.
  * TODO: optionally swap to Clerk / Supabase Auth / Firebase Auth later.
  */
 export const authRoutes: FastifyPluginAsync = async (app) => {
@@ -47,7 +49,17 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     const store = await getUserStore();
     try {
-      const user = await store.create(parsed.data);
+      const signupInput = {
+        email: parsed.data.email,
+        password: parsed.data.password,
+        acceptedAgeGate: parsed.data.acceptedAgeGate,
+        tosAccepted: parsed.data.tosAccepted,
+        privacyAccepted: parsed.data.privacyAccepted,
+        ...(parsed.data.dateOfBirth
+          ? { dateOfBirth: parsed.data.dateOfBirth }
+          : {}),
+      };
+      const user = await store.create(signupInput);
       const accessToken = await signAccessToken({
         sub: user.id,
         email: user.email,
@@ -58,9 +70,9 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       if (code === 'email_taken') {
         return reply.code(409).send({ error: 'email_taken' });
       }
-      if (code === 'underage') {
+      if (code === 'underage' || code === 'age_gate_required') {
         return reply.code(403).send({
-          error: 'underage',
+          error: code === 'age_gate_required' ? 'age_gate_required' : 'underage',
           message: 'Findr is for adults 18+ only.',
         });
       }
@@ -102,27 +114,24 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get('/me', async (req, reply) => {
-    const token = bearerToken(req.headers.authorization);
-    if (!token) {
-      return reply.code(401).send({ error: 'unauthorized' });
-    }
-    const payload = await verifyAccessToken(token);
-    if (!payload) {
-      return reply.code(401).send({ error: 'unauthorized' });
-    }
-
-    const store = await getUserStore();
-    const user = await store.findById(payload.sub);
-    if (!user) {
-      return reply.code(401).send({ error: 'unauthorized' });
-    }
-    return { user: toPublic(user) };
+    const auth = await requireAuth(req, reply);
+    if (!auth) return;
+    return { user: auth.user };
   });
 
   app.post('/age-gate', async (req, reply) => {
-    const body = (req.body ?? {}) as { dateOfBirth?: string };
+    const body = (req.body ?? {}) as {
+      dateOfBirth?: string;
+      acceptedAgeGate?: boolean;
+    };
+    if (body.acceptedAgeGate === true && !body.dateOfBirth) {
+      return {
+        eligible: true,
+        message: 'Eligible for Findr (18+ attestation).',
+      };
+    }
     if (!body.dateOfBirth) {
-      return reply.code(400).send({ error: 'dateOfBirth_required' });
+      return reply.code(400).send({ error: 'dateOfBirth_or_acceptedAgeGate_required' });
     }
     const eligible = isAdult(body.dateOfBirth);
     return {

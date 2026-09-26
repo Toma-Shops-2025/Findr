@@ -24,6 +24,13 @@ function asStringArray(values: unknown): string[] {
   return values.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
 }
 
+function asAge(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.trunc(n);
+}
+
 function rowToProfile(row: Record<string, unknown>): ProfileRecord {
   return {
     userId: String(row.user_id),
@@ -34,6 +41,7 @@ function rowToProfile(row: Record<string, unknown>): ProfileRecord {
     orientationsSeeking: asStringArray(row.orientations_seeking),
     lookingFor: asLookingFor(row.looking_for),
     photoUrls: asStringArray(row.photo_urls),
+    age: asAge(row.age),
     isVisible: Boolean(row.is_visible ?? true),
     lastActiveAt:
       row.last_active_at instanceof Date
@@ -62,6 +70,8 @@ class MemoryProfileStore {
   async upsert(userId: string, input: ProfileUpdateInput): Promise<ProfileRecord> {
     const existing = this.byUserId.get(userId);
     const stamp = nowIso();
+    const nextAge =
+      input.age !== undefined ? input.age : (existing?.age ?? null);
     const next: ProfileRecord = {
       userId,
       displayName: input.displayName.trim(),
@@ -73,6 +83,7 @@ class MemoryProfileStore {
         input.orientationsSeeking ?? existing?.orientationsSeeking ?? [],
       lookingFor: input.lookingFor ?? existing?.lookingFor ?? [],
       photoUrls: input.photoUrls ?? existing?.photoUrls ?? [],
+      age: nextAge,
       isVisible: input.isVisible ?? existing?.isVisible ?? true,
       lastActiveAt: stamp,
       createdAt: existing?.createdAt ?? stamp,
@@ -103,7 +114,7 @@ class PostgresProfileStore {
     const result = await this.pool.query(
       `SELECT user_id, display_name, bio, gender_identity,
               orientations_shown, orientations_seeking, looking_for,
-              photo_urls, is_visible, last_active_at, created_at, updated_at
+              photo_urls, age, is_visible, last_active_at, created_at, updated_at
        FROM profiles
        WHERE user_id = $1
        LIMIT 1`,
@@ -114,13 +125,30 @@ class PostgresProfileStore {
   }
 
   async upsert(userId: string, input: ProfileUpdateInput): Promise<ProfileRecord> {
+    const existing = await this.get(userId);
+    const age =
+      input.age !== undefined ? input.age : (existing?.age ?? null);
+    const bio =
+      input.bio !== undefined ? input.bio : (existing?.bio ?? '');
+    const genderIdentity =
+      input.genderIdentity !== undefined
+        ? input.genderIdentity
+        : (existing?.genderIdentity ?? '');
+    const orientationsShown =
+      input.orientationsShown ?? existing?.orientationsShown ?? [];
+    const orientationsSeeking =
+      input.orientationsSeeking ?? existing?.orientationsSeeking ?? [];
+    const lookingFor = input.lookingFor ?? existing?.lookingFor ?? [];
+    const photoUrls = input.photoUrls ?? existing?.photoUrls ?? [];
+    const isVisible = input.isVisible ?? existing?.isVisible ?? true;
+
     const result = await this.pool.query(
       `INSERT INTO profiles (
          user_id, display_name, bio, gender_identity,
          orientations_shown, orientations_seeking, looking_for,
-         photo_urls, is_visible, last_active_at, updated_at
+         photo_urls, age, is_visible, last_active_at, updated_at
        ) VALUES (
-         $1, $2, $3, $4, $5, $6, $7, $8, $9, now(), now()
+         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), now()
        )
        ON CONFLICT (user_id) DO UPDATE SET
          display_name = EXCLUDED.display_name,
@@ -130,22 +158,24 @@ class PostgresProfileStore {
          orientations_seeking = EXCLUDED.orientations_seeking,
          looking_for = EXCLUDED.looking_for,
          photo_urls = EXCLUDED.photo_urls,
+         age = EXCLUDED.age,
          is_visible = EXCLUDED.is_visible,
          last_active_at = now(),
          updated_at = now()
        RETURNING user_id, display_name, bio, gender_identity,
                  orientations_shown, orientations_seeking, looking_for,
-                 photo_urls, is_visible, last_active_at, created_at, updated_at`,
+                 photo_urls, age, is_visible, last_active_at, created_at, updated_at`,
       [
         userId,
         input.displayName.trim(),
-        (input.bio ?? '').trim() || null,
-        (input.genderIdentity ?? '').trim() || null,
-        input.orientationsShown ?? [],
-        input.orientationsSeeking ?? [],
-        input.lookingFor ?? [],
-        input.photoUrls ?? [],
-        input.isVisible ?? true,
+        bio.trim() || null,
+        genderIdentity.trim() || null,
+        orientationsShown,
+        orientationsSeeking,
+        lookingFor,
+        photoUrls,
+        age,
+        isVisible,
       ],
     );
     return rowToProfile(result.rows[0]);
@@ -155,7 +185,7 @@ class PostgresProfileStore {
     const result = await this.pool.query(
       `SELECT user_id, display_name, bio, gender_identity,
               orientations_shown, orientations_seeking, looking_for,
-              photo_urls, is_visible, last_active_at, created_at, updated_at
+              photo_urls, age, is_visible, last_active_at, created_at, updated_at
        FROM profiles
        WHERE is_visible = TRUE AND user_id <> $1`,
       [excludeUserId],

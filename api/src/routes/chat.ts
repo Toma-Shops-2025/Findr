@@ -16,6 +16,7 @@ import { getBlockStore } from '../modules/safety/blockStore.js';
  * First-party 1:1 chat (MVP).
  * TODO: buy-vs-build — Stream Chat / Ably / Firebase; mint short-lived vendor tokens.
  * Persistence: Postgres when DATABASE_URL + migrations applied; else in-memory.
+ * Photo messages: body and/or imageUrl (relative /uploads/… or http(s)).
  */
 
 function peerId(conversation: ConversationRecord, me: string): string {
@@ -47,7 +48,15 @@ async function toSummary(
 }
 
 function toPublicMessage(
-  message: { id: string; conversationId: string; senderId: string; body: string; createdAt: string },
+  message: {
+    id: string;
+    conversationId: string;
+    senderId: string;
+    body: string;
+    imageUrl: string | null;
+    videoUrl: string | null;
+    createdAt: string;
+  },
   me: string,
 ): PublicMessage {
   return {
@@ -55,6 +64,8 @@ function toPublicMessage(
     conversationId: message.conversationId,
     senderId: message.senderId,
     body: message.body,
+    imageUrl: message.imageUrl,
+    videoUrl: message.videoUrl,
     createdAt: message.createdAt,
     mine: message.senderId === me,
   };
@@ -64,9 +75,34 @@ const openSchema = z.object({
   peerUserId: z.string().uuid().or(z.string().min(1).max(80)),
 });
 
-const sendSchema = z.object({
-  body: z.string().trim().min(1).max(2000),
-});
+const mediaUrlRefine = (u: string | null | undefined) =>
+  u == null ||
+  u === '' ||
+  u.startsWith('/uploads/') ||
+  u.startsWith('https://') ||
+  u.startsWith('http://');
+
+const sendSchema = z
+  .object({
+    body: z.string().max(2000).optional().default(''),
+    imageUrl: z
+      .string()
+      .max(500)
+      .optional()
+      .refine(mediaUrlRefine, { message: 'imageUrl must be /uploads/… or http(s)' }),
+    videoUrl: z
+      .string()
+      .max(500)
+      .optional()
+      .refine(mediaUrlRefine, { message: 'videoUrl must be /uploads/… or http(s)' }),
+  })
+  .refine(
+    (data) =>
+      (data.body?.trim()?.length ?? 0) > 0 ||
+      Boolean(data.imageUrl?.trim()) ||
+      Boolean(data.videoUrl?.trim()),
+    { message: 'body, imageUrl, or videoUrl required' },
+  );
 
 /**
  * Resolve a conversation for the current user.
@@ -304,11 +340,11 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
 
       const store = await getChatStore();
       try {
-        const message = await store.sendMessage(
-          conversation.id,
-          auth.userId,
-          parsed.data.body,
-        );
+        const message = await store.sendMessage(conversation.id, auth.userId, {
+          body: parsed.data.body ?? '',
+          imageUrl: parsed.data.imageUrl?.trim() || null,
+          videoUrl: parsed.data.videoUrl?.trim() || null,
+        });
         return { message: toPublicMessage(message, auth.userId) };
       } catch (err) {
         const code = (err as { code?: string }).code;
@@ -317,6 +353,9 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         }
         if (code === 'forbidden') {
           return reply.code(403).send({ error: 'forbidden' });
+        }
+        if (code === 'empty_message') {
+          return reply.code(400).send({ error: 'empty_message' });
         }
         throw err;
       }

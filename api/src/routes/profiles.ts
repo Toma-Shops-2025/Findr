@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { yearsSince } from '../modules/auth/ageGate.js';
 import { requireAuth } from '../modules/auth/requireAuth.js';
 import { getUserStore } from '../modules/auth/userStore.js';
+import { isAllowedUploadUrl } from '../modules/media/storage.js';
 import { getProfileStore } from '../modules/profiles/profileStore.js';
 import type { LookingFor, ProfileRecord, PublicProfile } from '../modules/profiles/types.js';
 import { getBlockStore } from '../modules/safety/blockStore.js';
@@ -23,31 +24,39 @@ const updateSchema = z.object({
   orientationsShown: z.array(z.string().max(60)).max(12).optional(),
   orientationsSeeking: z.array(z.string().max(60)).max(12).optional(),
   lookingFor: z.array(lookingForEnum).max(8).optional(),
-  // Allow http(s) URLs or local stub:photo-N placeholders until media pipeline exists.
+  // http(s), local /uploads/…, or stub:photo-N placeholders.
   photoUrls: z
     .array(z.string().max(500))
     .max(6)
     .optional()
-    .refine(
-      (urls) =>
-        !urls ||
-        urls.every(
-          (u) =>
-            u.startsWith('stub:') ||
-            u.startsWith('https://') ||
-            u.startsWith('http://'),
-        ),
-      { message: 'photoUrls must be http(s) or stub:…' },
-    ),
+    .refine((urls) => !urls || urls.every((u) => isAllowedUploadUrl(u)), {
+      message: 'photoUrls must be http(s), /uploads/…, or stub:…',
+    }),
+  /** Profile age (not DOB). When set, must be 18+. */
+  age: z
+    .number()
+    .int()
+    .min(18, { message: 'age must be 18 or older' })
+    .max(120)
+    .nullable()
+    .optional(),
   isVisible: z.boolean().optional(),
 });
+
+function resolveAge(
+  record: ProfileRecord | null,
+  dateOfBirth: string | null,
+): number | null {
+  if (record?.age != null) return record.age;
+  return yearsSince(dateOfBirth);
+}
 
 function toPublicProfile(
   record: ProfileRecord | null,
   userId: string,
-  dateOfBirth: string | null | undefined,
+  dateOfBirth: string | null,
 ): PublicProfile {
-  const age = yearsSince(dateOfBirth) ?? 18;
+  const age = resolveAge(record, dateOfBirth);
   if (!record) {
     return {
       userId,
@@ -107,6 +116,14 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
+    // Extra guard: reject under-18 ages even if schema drifts.
+    if (parsed.data.age != null && parsed.data.age < 18) {
+      return reply.code(400).send({
+        error: 'age_under_18',
+        message: 'Findr is 18+ only. Age must be 18 or older.',
+      });
+    }
+
     const store = await getProfileStore();
     const update: {
       displayName: string;
@@ -116,6 +133,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
       orientationsSeeking?: string[];
       lookingFor?: LookingFor[];
       photoUrls?: string[];
+      age?: number | null;
       isVisible?: boolean;
     } = { displayName: parsed.data.displayName };
     if (parsed.data.bio !== undefined) update.bio = parsed.data.bio;
@@ -133,6 +151,9 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     }
     if (parsed.data.photoUrls !== undefined) {
       update.photoUrls = parsed.data.photoUrls;
+    }
+    if (parsed.data.age !== undefined) {
+      update.age = parsed.data.age;
     }
     if (parsed.data.isVisible !== undefined) {
       update.isVisible = parsed.data.isVisible;

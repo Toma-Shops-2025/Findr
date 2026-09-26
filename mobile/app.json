@@ -1,53 +1,98 @@
-{
-  "expo": {
-    "name": "Findr",
-    "slug": "findr",
-    "version": "0.1.0",
-    "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "findr",
-    "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "app.findr.mobile"
-    },
-    "android": {
-      "package": "app.findr.mobile",
-      "adaptiveIcon": {
-        "backgroundColor": "#12151C",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      },
-      "predictiveBackGestureEnabled": false
-    },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
-    },
-    "plugins": [
-      "expo-router",
-      "expo-font",
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/splash-icon.png",
-          "resizeMode": "contain",
-          "backgroundColor": "#12151C"
-        }
-      ],
-      "expo-secure-store"
-    ],
-    "experiments": {
-      "typedRoutes": true
-    },
-    "extra": {
-      "eas": {
-        "projectId": "todo-replace-with-eas-project-id"
-      },
-      "apiUrl": "http://localhost:4000"
-    }
-  }
+﻿{
+    "expo":  {
+                 "name":  "Findr",
+                 "slug":  "findr",
+                 "version":  "0.1.0",
+                 "orientation":  "portrait",
+                 "icon":  "./assets/images/icon.png",
+                 "scheme":  "findr",
+                 "userInterfaceStyle":  "dark",
+                 "ios":  {
+                             "supportsTablet":  true,
+                             "bundleIdentifier":  "app.findr.mobile"
+                         },
+                 "android":  {
+                                 "package":  "app.findr.mobile",
+                                 "versionCode":  1,
+                                 "adaptiveIcon":  {
+                                                      "backgroundColor":  "#12151C",
+                                                      "foregroundImage":  "./assets/images/android-icon-foreground.png",
+                                                      "backgroundImage":  "./assets/images/android-icon-background.png",
+                                                      "monochromeImage":  "./assets/images/android-icon-monochrome.png"
+                                                  },
+                                 "predictiveBackGestureEnabled":  false,
+                                 "softwareKeyboardLayoutMode":  "resize"
+                             },
+                 "web":  {
+                             "bundler":  "metro",
+                             "output":  "static",
+                             "favicon":  "./assets/images/favicon.png"
+                         },
+                 "plugins":  [
+                                 "expo-router",
+                                 [
+                                     "expo-splash-screen",
+                                     {
+                                         "image":  "./assets/images/splash-icon.png",
+                                         "resizeMode":  "contain",
+                                         "backgroundColor":  "#12151C"
+                                     }
+                                 ],
+                                 "expo-secure-store",
+                                 "./plugins/withDevCleartextTraffic.js",
+                                 [
+                                     "expo-alternate-app-icons",
+                                     [
+                                         {
+                                             "name":  "Calculator",
+                                             "ios":  "./assets/images/privacy-icons/icon-calculator.png",
+                                             "android":  {
+                                                             "foregroundImage":  "./assets/images/privacy-icons/icon-calculator-foreground.png",
+                                                             "backgroundColor":  "#2D3036"
+                                                         }
+                                         },
+                                         {
+                                             "name":  "Weather",
+                                             "ios":  "./assets/images/privacy-icons/icon-weather.png",
+                                             "android":  {
+                                                             "foregroundImage":  "./assets/images/privacy-icons/icon-weather-foreground.png",
+                                                             "backgroundColor":  "#5AA0DC"
+                                                         }
+                                         },
+                                         {
+                                             "name":  "Notes",
+                                             "ios":  "./assets/images/privacy-icons/icon-notes.png",
+                                             "android":  {
+                                                             "foregroundImage":  "./assets/images/privacy-icons/icon-notes-foreground.png",
+                                                             "backgroundColor":  "#373A40"
+                                                         }
+                                         }
+                                     ]
+                                 ],
+                                 [
+                                     "expo-image-picker",
+                                     {
+                                         "photosPermission":  "Findr lets you pick a photo or short video to send. Media is uploaded to Findr only and is not saved to your phone gallery."
+                                     }
+                                 ],
+                                 [
+                                     "expo-camera",
+                                     {
+                                         "cameraPermission":  "Findr uses an in-app camera. Photos and short videos stay inside Findr -- not your phone gallery.",
+                                         "microphonePermission":  "Findr uses the mic for short videos (max 30 seconds) that stay inside Findr.",
+                                         "recordAudioAndroid":  true
+                                     }
+                                 ],
+                                 "expo-av"
+                             ],
+                 "experiments":  {
+                                     "typedRoutes":  true
+                                 },
+                 "extra":  {
+                               "eas":  {
+                                           "projectId":  "fca40da4-74a0-4eba-83e2-ef6155353a86"
+                                       },
+                               "apiUrl":  "https://api.myfindr.fun"
+                           }
+             }
 }

@@ -2,7 +2,11 @@ import { randomUUID } from 'node:crypto';
 import type pg from 'pg';
 
 import { getPool } from '../db.js';
-import type { ConversationRecord, MessageRecord } from './types.js';
+import type {
+  ConversationRecord,
+  MessageRecord,
+  SendMessageInput,
+} from './types.js';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -11,6 +15,14 @@ function nowIso(): string {
 /** Stable pair order so each 1:1 pair has a single conversation row. */
 export function orderedPair(userId: string, peerId: string): [string, string] {
   return userId < peerId ? [userId, peerId] : [peerId, userId];
+}
+
+function messagePreview(input: SendMessageInput): string {
+  const text = input.body.trim();
+  if (text) return text.slice(0, 140);
+  if (input.videoUrl) return '[Video]';
+  if (input.imageUrl) return '[Photo]';
+  return '';
 }
 
 function rowToConversation(row: Record<string, unknown>): ConversationRecord {
@@ -43,6 +55,14 @@ function rowToMessage(row: Record<string, unknown>): MessageRecord {
     conversationId: String(row.conversation_id),
     senderId: String(row.sender_id),
     body: String(row.body ?? ''),
+    imageUrl:
+      row.image_url == null || row.image_url === ''
+        ? null
+        : String(row.image_url),
+    videoUrl:
+      row.video_url == null || row.video_url === ''
+        ? null
+        : String(row.video_url),
     createdAt:
       row.created_at instanceof Date
         ? row.created_at.toISOString()
@@ -52,7 +72,6 @@ function rowToMessage(row: Record<string, unknown>): MessageRecord {
 
 class MemoryChatStore {
   private conversations = new Map<string, ConversationRecord>();
-  /** key: orderedPair joined */
   private pairIndex = new Map<string, string>();
   private messagesByConv = new Map<string, MessageRecord[]>();
 
@@ -114,7 +133,7 @@ class MemoryChatStore {
   async sendMessage(
     conversationId: string,
     senderId: string,
-    body: string,
+    input: SendMessageInput,
   ): Promise<MessageRecord> {
     const conversation = this.conversations.get(conversationId);
     if (!conversation) {
@@ -126,18 +145,27 @@ class MemoryChatStore {
       throw Object.assign(new Error('forbidden'), { code: 'forbidden' });
     }
 
+    const body = input.body.trim();
+    const imageUrl = input.imageUrl?.trim() || null;
+    const videoUrl = input.videoUrl?.trim() || null;
+    if (!body && !imageUrl && !videoUrl) {
+      throw Object.assign(new Error('empty_message'), { code: 'empty_message' });
+    }
+
     const message: MessageRecord = {
       id: randomUUID(),
       conversationId,
       senderId,
       body,
+      imageUrl,
+      videoUrl,
       createdAt: nowIso(),
     };
     const list = this.messagesByConv.get(conversationId) ?? [];
     list.push(message);
     this.messagesByConv.set(conversationId, list);
 
-    conversation.lastMessagePreview = body.slice(0, 140);
+    conversation.lastMessagePreview = messagePreview({ body, imageUrl, videoUrl });
     conversation.lastMessageAt = message.createdAt;
     conversation.updatedAt = message.createdAt;
     this.conversations.set(conversationId, conversation);
@@ -199,7 +227,6 @@ class PostgresChatStore {
                  created_at, updated_at`,
       [userAId, userBId],
     );
-    // ON CONFLICT RETURNING always returns a row; created is approximate for race.
     const wasInsert = inserted.rowCount === 1 && !existing.rows[0];
     return {
       conversation: rowToConversation(inserted.rows[0]),
@@ -213,7 +240,7 @@ class PostgresChatStore {
   ): Promise<MessageRecord[]> {
     const capped = Math.max(1, Math.min(limit, 200));
     const result = await this.pool.query(
-      `SELECT id, conversation_id, sender_id, body, created_at
+      `SELECT id, conversation_id, sender_id, body, image_url, video_url, created_at
        FROM messages
        WHERE conversation_id = $1
        ORDER BY created_at ASC
@@ -226,8 +253,15 @@ class PostgresChatStore {
   async sendMessage(
     conversationId: string,
     senderId: string,
-    body: string,
+    input: SendMessageInput,
   ): Promise<MessageRecord> {
+    const body = input.body.trim();
+    const imageUrl = input.imageUrl?.trim() || null;
+    const videoUrl = input.videoUrl?.trim() || null;
+    if (!body && !imageUrl && !videoUrl) {
+      throw Object.assign(new Error('empty_message'), { code: 'empty_message' });
+    }
+
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
@@ -246,12 +280,12 @@ class PostgresChatStore {
       }
 
       const inserted = await client.query(
-        `INSERT INTO messages (conversation_id, sender_id, body)
-         VALUES ($1, $2, $3)
-         RETURNING id, conversation_id, sender_id, body, created_at`,
-        [conversationId, senderId, body],
+        `INSERT INTO messages (conversation_id, sender_id, body, image_url, video_url)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, conversation_id, sender_id, body, image_url, video_url, created_at`,
+        [conversationId, senderId, body, imageUrl, videoUrl],
       );
-      const preview = body.slice(0, 140);
+      const preview = messagePreview({ body, imageUrl, videoUrl });
       await client.query(
         `UPDATE conversations
          SET last_message_preview = $2,

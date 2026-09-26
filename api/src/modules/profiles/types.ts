@@ -23,6 +23,8 @@ export type ProfileRecord = {
   orientationsSeeking: string[];
   lookingFor: LookingFor[];
   photoUrls: string[];
+  /** Profile-declared age (preferred for display). Null until set on profile edit. */
+  age: number | null;
   isVisible: boolean;
   lastActiveAt: string | null;
   createdAt: string;
@@ -36,8 +38,10 @@ export type ProfileUpdateInput = {
   orientationsShown?: string[];
   orientationsSeeking?: string[];
   lookingFor?: LookingFor[];
-  /** Photo URL stubs until media upload pipeline exists. */
+  /** Absolute http(s), /uploads/… paths, or stub: placeholders. */
   photoUrls?: string[];
+  /** When set, must be >= 18 (server-validated). */
+  age?: number | null;
   isVisible?: boolean;
 };
 
@@ -50,8 +54,11 @@ export type PublicProfile = {
   orientationsSeeking: string[];
   lookingFor: LookingFor[];
   photoUrls: string[];
-  /** Derived from DOB — never expose raw DOB on profiles. */
-  age: number;
+  /**
+   * Prefer profile.age when set; else DOB-derived.
+   * Never expose raw DOB.
+   */
+  age: number | null;
   isVisible: boolean;
   lastActiveAt: string | null;
   updatedAt: string;

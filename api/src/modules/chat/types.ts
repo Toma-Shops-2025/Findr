@@ -13,6 +13,10 @@ export type MessageRecord = {
   conversationId: string;
   senderId: string;
   body: string;
+  /** Relative /uploads/… or absolute http(s) URL when message includes an image. */
+  imageUrl: string | null;
+  /** Relative /uploads/… or absolute http(s) URL for short video (max 30s). */
+  videoUrl: string | null;
   createdAt: string;
 };
 
@@ -30,6 +34,14 @@ export type PublicMessage = {
   conversationId: string;
   senderId: string;
   body: string;
+  imageUrl: string | null;
+  videoUrl: string | null;
   createdAt: string;
   mine: boolean;
+};
+
+export type SendMessageInput = {
+  body: string;
+  imageUrl?: string | null;
+  videoUrl?: string | null;
 };

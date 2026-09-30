@@ -60,6 +60,14 @@ export type ConversationSummary = {
   updatedAt: string;
 };
 
+/** Approximate pin shared in chat (~100m / 3 decimal places by default). */
+export type MessageLocation = {
+  lat: number;
+  lng: number;
+  accuracyM: number | null;
+  sharedAt: string;
+};
+
 export type PublicMessage = {
   id: string;
   conversationId: string;
@@ -67,8 +75,11 @@ export type PublicMessage = {
   body: string;
   imageUrl: string | null;
   videoUrl: string | null;
+  location: MessageLocation | null;
   createdAt: string;
   mine: boolean;
+  likedByMe: boolean;
+  likeCount: number;
 };
 
 export type ReportReason =

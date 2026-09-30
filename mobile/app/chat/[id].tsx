@@ -5,6 +5,7 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -15,22 +16,33 @@ import {
 import { Stack, router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { Video, ResizeMode } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 
 import { colors, radii, spacing, typography } from '@/constants/theme';
 import { apiFetch, apiUploadMedia } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import {
+  OPEN_DIRECTIONS_BODY,
+  OPEN_DIRECTIONS_TITLE,
+  SHARE_LOCATION_BODY,
+  SHARE_LOCATION_TITLE,
+  approximateChatLocation,
+  mapsDirectionsUrl,
+} from '@/lib/chatLocation';
 import { VIDEO_MAX_DURATION_SEC } from '@/lib/mediaLimits';
 import { resolveMediaUrl } from '@/lib/mediaUrl';
 import { useSafetyActions } from '@/lib/useSafetyActions';
 import type { ConversationSummary, PublicMessage } from '@/lib/types';
 
 const POLL_MS = 4000;
+const DOUBLE_TAP_MS = 280;
 
 /**
- * Chat thread with text, photo, short video, Findr camera, and personal album.
+ * Chat thread: text, photo, short video, Findr camera/album, double-tap like,
+ * and GPS share (with mandatory safety popups).
  *
- * Privacy: camera/picker media stays in Findr (upload + album). Never writes to
- * device Photos / Gallery / Camera Roll.
+ * Privacy: camera/picker media stays in Findr (upload + album). Location is
+ * chat + server only -- never written to the device gallery.
  */
 export default function ChatThreadScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -46,6 +58,9 @@ export default function ChatThreadScreen() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<FlatList<PublicMessage>>(null);
+  const lastTapRef = useRef<{ id: string; t: number } | null>(null);
+  const singleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const likeInFlight = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     if (!accessToken || !id) return;
@@ -61,7 +76,7 @@ export default function ChatThreadScreen() {
         ),
       ]);
       setConversation(meta.conversation);
-      setMessages(msgs.messages ?? []);
+      setMessages(normalizeMessages(msgs.messages ?? []));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load chat');
@@ -83,7 +98,7 @@ export default function ChatThreadScreen() {
             `/chat/conversations/${id}/messages?limit=100`,
             { token: accessToken },
           );
-          setMessages(msgs.messages ?? []);
+          setMessages(normalizeMessages(msgs.messages ?? []));
         } catch {
           // Keep last good state while offline briefly.
         }
@@ -91,6 +106,12 @@ export default function ChatThreadScreen() {
     }, POLL_MS);
     return () => clearInterval(timer);
   }, [accessToken, id]);
+
+  useEffect(() => {
+    return () => {
+      if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
+    };
+  }, []);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -127,6 +148,87 @@ export default function ChatThreadScreen() {
     });
   }, [navigation, conversation, accessToken, blockUser, reportUser]);
 
+  const patchMessage = useCallback((next: PublicMessage) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === next.id ? normalizeMessage(next) : m)),
+    );
+  }, []);
+
+  const toggleLike = useCallback(
+    async (item: PublicMessage) => {
+      if (!accessToken || !id) return;
+      if (likeInFlight.current.has(item.id)) return;
+      likeInFlight.current.add(item.id);
+
+      const liked = Boolean(item.likedByMe);
+      // Optimistic UI so sender/receiver see the heart immediately.
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== item.id) return m;
+          const likeCount = Math.max(0, (m.likeCount ?? 0) + (liked ? -1 : 1));
+          return { ...m, likedByMe: !liked, likeCount };
+        }),
+      );
+
+      try {
+        const path = `/chat/conversations/${id}/messages/${item.id}/like`;
+        const data = await apiFetch<{ message: PublicMessage }>(path, {
+          method: liked ? 'DELETE' : 'POST',
+          token: accessToken,
+        });
+        patchMessage(data.message);
+      } catch (err) {
+        // Revert optimistic change on failure.
+        setMessages((prev) =>
+          prev.map((m) => (m.id === item.id ? item : m)),
+        );
+        setError(err instanceof Error ? err.message : 'Like failed');
+      } finally {
+        likeInFlight.current.delete(item.id);
+      }
+    },
+    [accessToken, id, patchMessage],
+  );
+
+  const openDirections = useCallback((item: PublicMessage) => {
+    const loc = item.location;
+    if (!loc) return;
+    Alert.alert(OPEN_DIRECTIONS_TITLE, OPEN_DIRECTIONS_BODY, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Open maps',
+        onPress: () => {
+          void Linking.openURL(mapsDirectionsUrl(loc.lat, loc.lng));
+        },
+      },
+    ]);
+  }, []);
+
+  const onBubblePress = useCallback(
+    (item: PublicMessage) => {
+      const now = Date.now();
+      const last = lastTapRef.current;
+      if (last && last.id === item.id && now - last.t < DOUBLE_TAP_MS) {
+        if (singleTapTimerRef.current) {
+          clearTimeout(singleTapTimerRef.current);
+          singleTapTimerRef.current = null;
+        }
+        lastTapRef.current = null;
+        void toggleLike(item);
+        return;
+      }
+      lastTapRef.current = { id: item.id, t: now };
+      if (item.location) {
+        if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
+        singleTapTimerRef.current = setTimeout(() => {
+          singleTapTimerRef.current = null;
+          openDirections(item);
+        }, DOUBLE_TAP_MS);
+      }
+    },
+    [openDirections, toggleLike],
+  );
+
   const onSend = async () => {
     if (!accessToken || !id) return;
     const body = draft.trim();
@@ -142,7 +244,7 @@ export default function ChatThreadScreen() {
           body: JSON.stringify({ body }),
         },
       );
-      setMessages((prev) => [...prev, data.message]);
+      setMessages((prev) => [...prev, normalizeMessage(data.message)]);
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
     } catch (err) {
       setDraft(body);
@@ -183,7 +285,7 @@ export default function ChatThreadScreen() {
           body: JSON.stringify(payload),
         },
       );
-      setMessages((prev) => [...prev, data.message]);
+      setMessages((prev) => [...prev, normalizeMessage(data.message)]);
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Media send failed');
@@ -219,6 +321,71 @@ export default function ChatThreadScreen() {
         : null,
       'upload',
     );
+  };
+
+  const sendLocationConfirmed = async () => {
+    if (!accessToken || !id || sending) return;
+    setSending(true);
+    setError(null);
+    try {
+      const current = await Location.getForegroundPermissionsAsync();
+      let status = current.status;
+      if (status !== 'granted') {
+        const asked = await Location.requestForegroundPermissionsAsync();
+        status = asked.status;
+      }
+      if (status !== 'granted') {
+        Alert.alert(
+          'Location permission needed',
+          'Allow Findr to read your location to share it in this chat. It is not saved to your phone gallery.',
+        );
+        return;
+      }
+
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const approx = approximateChatLocation(
+        pos.coords.latitude,
+        pos.coords.longitude,
+        typeof pos.coords.accuracy === 'number' ? pos.coords.accuracy : null,
+      );
+
+      const data = await apiFetch<{ message: PublicMessage }>(
+        `/chat/conversations/${id}/messages`,
+        {
+          method: 'POST',
+          token: accessToken,
+          body: JSON.stringify({
+            body: '',
+            location: {
+              lat: approx.lat,
+              lng: approx.lng,
+              accuracyM: approx.accuracyM,
+            },
+          }),
+        },
+      );
+      setMessages((prev) => [...prev, normalizeMessage(data.message)]);
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Location send failed');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const onShareLocation = () => {
+    if (!id || sending) return;
+    Alert.alert(SHARE_LOCATION_TITLE, SHARE_LOCATION_BODY, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Share approximate location',
+        onPress: () => {
+          void sendLocationConfirmed();
+        },
+      },
+    ]);
   };
 
   const openMediaMenu = () => {
@@ -280,8 +447,10 @@ export default function ChatThreadScreen() {
         renderItem={({ item }) => {
           const imageUri = resolveMediaUrl(item.imageUrl);
           const videoUri = resolveMediaUrl(item.videoUrl);
+          const showHeart = (item.likeCount ?? 0) > 0 || item.likedByMe;
           return (
-            <View
+            <Pressable
+              onPress={() => onBubblePress(item)}
               style={[styles.bubble, item.mine ? styles.mine : styles.theirs]}
             >
               {imageUri ? (
@@ -296,6 +465,26 @@ export default function ChatThreadScreen() {
                   isLooping={false}
                 />
               ) : null}
+              {item.location ? (
+                <View style={styles.locationBox}>
+                  <Text
+                    style={[
+                      styles.locationTitle,
+                      item.mine && styles.mineText,
+                    ]}
+                  >
+                    Approximate location
+                  </Text>
+                  <Text
+                    style={[
+                      styles.locationMeta,
+                      item.mine && styles.mineText,
+                    ]}
+                  >
+                    Tap for directions · double-tap to like
+                  </Text>
+                </View>
+              ) : null}
               {item.body?.trim() ? (
                 <Text
                   style={[styles.bubbleText, item.mine && styles.mineText]}
@@ -303,7 +492,19 @@ export default function ChatThreadScreen() {
                   {item.body}
                 </Text>
               ) : null}
-            </View>
+              {showHeart ? (
+                <Text
+                  style={[
+                    styles.likeBadge,
+                    item.mine ? styles.likeBadgeMine : styles.likeBadgeTheirs,
+                    item.likedByMe && styles.likeBadgeActive,
+                  ]}
+                >
+                  {item.likedByMe ? '♥' : '♡'}{' '}
+                  {(item.likeCount ?? 0) > 1 ? item.likeCount : ''}
+                </Text>
+              ) : null}
+            </Pressable>
           );
         }}
       />
@@ -314,6 +515,13 @@ export default function ChatThreadScreen() {
           disabled={sending}
         >
           <Text style={styles.photoBtnText}>Media</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.photoBtn, sending && styles.sendDisabled]}
+          onPress={onShareLocation}
+          disabled={sending}
+        >
+          <Text style={styles.photoBtnText}>Loc</Text>
         </Pressable>
         <TextInput
           placeholder="Message…"
@@ -335,6 +543,19 @@ export default function ChatThreadScreen() {
       </View>
     </KeyboardAvoidingView>
   );
+}
+
+function normalizeMessage(m: PublicMessage): PublicMessage {
+  return {
+    ...m,
+    location: m.location ?? null,
+    likedByMe: Boolean(m.likedByMe),
+    likeCount: Number(m.likeCount ?? 0),
+  };
+}
+
+function normalizeMessages(list: PublicMessage[]): PublicMessage[] {
+  return list.map(normalizeMessage);
 }
 
 const styles = StyleSheet.create({
@@ -407,6 +628,20 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     backgroundColor: colors.ink,
   },
+  locationBox: {
+    gap: 2,
+    paddingVertical: 2,
+  },
+  locationTitle: {
+    fontFamily: typography.bodyMedium,
+    color: colors.mist,
+    fontSize: 15,
+  },
+  locationMeta: {
+    fontFamily: typography.body,
+    color: colors.mistMuted,
+    fontSize: 12,
+  },
   bubbleText: {
     fontFamily: typography.body,
     color: colors.mist,
@@ -415,6 +650,21 @@ const styles = StyleSheet.create({
   },
   mineText: {
     color: colors.ink,
+  },
+  likeBadge: {
+    fontFamily: typography.bodyMedium,
+    fontSize: 13,
+    marginTop: 2,
+    alignSelf: 'flex-start',
+  },
+  likeBadgeTheirs: {
+    color: colors.coral,
+  },
+  likeBadgeMine: {
+    color: colors.ink,
+  },
+  likeBadgeActive: {
+    opacity: 1,
   },
   composer: {
     flexDirection: 'row',

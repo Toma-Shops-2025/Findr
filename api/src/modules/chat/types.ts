@@ -8,6 +8,14 @@ export type ConversationRecord = {
   updatedAt: string;
 };
 
+/** Approximate chat location pin (client rounds ~3 decimals / ~100m by default). */
+export type MessageLocation = {
+  lat: number;
+  lng: number;
+  accuracyM: number | null;
+  sharedAt: string;
+};
+
 export type MessageRecord = {
   id: string;
   conversationId: string;
@@ -17,7 +25,13 @@ export type MessageRecord = {
   imageUrl: string | null;
   /** Relative /uploads/… or absolute http(s) URL for short video (max 30s). */
   videoUrl: string | null;
+  location: MessageLocation | null;
   createdAt: string;
+};
+
+export type MessageWithLikes = MessageRecord & {
+  likedByMe: boolean;
+  likeCount: number;
 };
 
 export type ConversationSummary = {
@@ -36,12 +50,20 @@ export type PublicMessage = {
   body: string;
   imageUrl: string | null;
   videoUrl: string | null;
+  location: MessageLocation | null;
   createdAt: string;
   mine: boolean;
+  likedByMe: boolean;
+  likeCount: number;
 };
 
 export type SendMessageInput = {
   body: string;
   imageUrl?: string | null;
   videoUrl?: string | null;
+  location?: {
+    lat: number;
+    lng: number;
+    accuracyM?: number | null;
+  } | null;
 };

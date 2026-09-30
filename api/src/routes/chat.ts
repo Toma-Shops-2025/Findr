@@ -7,6 +7,7 @@ import { getChatStore } from '../modules/chat/chatStore.js';
 import type {
   ConversationRecord,
   ConversationSummary,
+  MessageWithLikes,
   PublicMessage,
 } from '../modules/chat/types.js';
 import { getProfileStore } from '../modules/profiles/profileStore.js';
@@ -16,7 +17,7 @@ import { getBlockStore } from '../modules/safety/blockStore.js';
  * First-party 1:1 chat (MVP).
  * TODO: buy-vs-build — Stream Chat / Ably / Firebase; mint short-lived vendor tokens.
  * Persistence: Postgres when DATABASE_URL + migrations applied; else in-memory.
- * Photo messages: body and/or imageUrl (relative /uploads/… or http(s)).
+ * Photo / video / location messages; double-tap likes via message_likes.
  */
 
 function peerId(conversation: ConversationRecord, me: string): string {
@@ -47,18 +48,7 @@ async function toSummary(
   };
 }
 
-function toPublicMessage(
-  message: {
-    id: string;
-    conversationId: string;
-    senderId: string;
-    body: string;
-    imageUrl: string | null;
-    videoUrl: string | null;
-    createdAt: string;
-  },
-  me: string,
-): PublicMessage {
+function toPublicMessage(message: MessageWithLikes, me: string): PublicMessage {
   return {
     id: message.id,
     conversationId: message.conversationId,
@@ -66,8 +56,11 @@ function toPublicMessage(
     body: message.body,
     imageUrl: message.imageUrl,
     videoUrl: message.videoUrl,
+    location: message.location,
     createdAt: message.createdAt,
     mine: message.senderId === me,
+    likedByMe: message.likedByMe,
+    likeCount: message.likeCount,
   };
 }
 
@@ -82,6 +75,12 @@ const mediaUrlRefine = (u: string | null | undefined) =>
   u.startsWith('https://') ||
   u.startsWith('http://');
 
+const locationSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  accuracyM: z.number().min(0).max(50_000).optional().nullable(),
+});
+
 const sendSchema = z
   .object({
     body: z.string().max(2000).optional().default(''),
@@ -95,13 +94,15 @@ const sendSchema = z
       .max(500)
       .optional()
       .refine(mediaUrlRefine, { message: 'videoUrl must be /uploads/… or http(s)' }),
+    location: locationSchema.optional().nullable(),
   })
   .refine(
     (data) =>
       (data.body?.trim()?.length ?? 0) > 0 ||
       Boolean(data.imageUrl?.trim()) ||
-      Boolean(data.videoUrl?.trim()),
-    { message: 'body, imageUrl, or videoUrl required' },
+      Boolean(data.videoUrl?.trim()) ||
+      Boolean(data.location),
+    { message: 'body, imageUrl, videoUrl, or location required' },
   );
 
 /**
@@ -150,6 +151,24 @@ async function resolveConversationForUser(
   return { ok: true, conversation, created };
 }
 
+async function ensureNotBlocked(
+  me: string,
+  conversation: ConversationRecord,
+): Promise<{ ok: true; other: string } | { ok: false; status: 403; error: string; message?: string }> {
+  const other = peerId(conversation, me);
+  const blocks = await getBlockStore();
+  const blocked = await blocks.blockedPairIds(me);
+  if (blocked.has(other)) {
+    return {
+      ok: false,
+      status: 403,
+      error: 'blocked',
+      message: 'Conversation hidden due to block',
+    };
+  }
+  return { ok: true, other };
+}
+
 export const chatRoutes: FastifyPluginAsync = async (app) => {
   app.post('/token', async (req, reply) => {
     const auth = await requireAuth(req, reply);
@@ -172,9 +191,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       visible.map((c) => toSummary(c, auth.userId)),
     );
 
-    const poolHint = process.env.DATABASE_URL
-      ? undefined
-      : 'memory';
+    const poolHint = process.env.DATABASE_URL ? undefined : 'memory';
     return {
       conversations,
       mode: poolHint,
@@ -245,19 +262,16 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const { conversation } = resolved;
-      const other = peerId(conversation, auth.userId);
-      const blocks = await getBlockStore();
-      const blocked = await blocks.blockedPairIds(auth.userId);
-      if (blocked.has(other)) {
-        return reply.code(403).send({
-          error: 'blocked',
-          message: 'Conversation hidden due to block',
+      const blocked = await ensureNotBlocked(auth.userId, resolved.conversation);
+      if (!blocked.ok) {
+        return reply.code(blocked.status).send({
+          error: blocked.error,
+          message: blocked.message,
         });
       }
 
       return {
-        conversation: await toSummary(conversation, auth.userId),
+        conversation: await toSummary(resolved.conversation, auth.userId),
         created: resolved.created,
       };
     },
@@ -280,23 +294,21 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const { conversation } = resolved;
-      const other = peerId(conversation, auth.userId);
-      const blocks = await getBlockStore();
-      const blocked = await blocks.blockedPairIds(auth.userId);
-      if (blocked.has(other)) {
-        return reply.code(403).send({ error: 'blocked' });
+      const blocked = await ensureNotBlocked(auth.userId, resolved.conversation);
+      if (!blocked.ok) {
+        return reply.code(blocked.status).send({ error: blocked.error });
       }
 
       const store = await getChatStore();
       const limit = Number(req.query.limit ?? 100);
       const messages = await store.listMessages(
-        conversation.id,
+        resolved.conversation.id,
         Number.isFinite(limit) ? limit : 100,
+        auth.userId,
       );
 
       return {
-        conversationId: conversation.id,
+        conversationId: resolved.conversation.id,
         messages: messages.map((m) => toPublicMessage(m, auth.userId)),
       };
     },
@@ -327,24 +339,32 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const { conversation } = resolved;
-      const other = peerId(conversation, auth.userId);
-      const blocks = await getBlockStore();
-      const blocked = await blocks.blockedPairIds(auth.userId);
-      if (blocked.has(other)) {
-        return reply.code(403).send({
-          error: 'blocked',
+      const blocked = await ensureNotBlocked(auth.userId, resolved.conversation);
+      if (!blocked.ok) {
+        return reply.code(blocked.status).send({
+          error: blocked.error,
           message: 'Cannot message a blocked user',
         });
       }
 
       const store = await getChatStore();
       try {
-        const message = await store.sendMessage(conversation.id, auth.userId, {
-          body: parsed.data.body ?? '',
-          imageUrl: parsed.data.imageUrl?.trim() || null,
-          videoUrl: parsed.data.videoUrl?.trim() || null,
-        });
+        const message = await store.sendMessage(
+          resolved.conversation.id,
+          auth.userId,
+          {
+            body: parsed.data.body ?? '',
+            imageUrl: parsed.data.imageUrl?.trim() || null,
+            videoUrl: parsed.data.videoUrl?.trim() || null,
+            location: parsed.data.location
+              ? {
+                  lat: parsed.data.location.lat,
+                  lng: parsed.data.location.lng,
+                  accuracyM: parsed.data.location.accuracyM ?? null,
+                }
+              : null,
+          },
+        );
         return { message: toPublicMessage(message, auth.userId) };
       } catch (err) {
         const code = (err as { code?: string }).code;
@@ -362,11 +382,102 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  app.post<{ Params: { id: string; messageId: string } }>(
+    '/conversations/:id/messages/:messageId/like',
+    async (req, reply) => {
+      const auth = await requireAuth(req, reply);
+      if (!auth) return;
+
+      const resolved = await resolveConversationForUser(
+        auth.userId,
+        req.params.id,
+      );
+      if (!resolved.ok) {
+        return reply.code(resolved.status).send({
+          error: resolved.error,
+          message: resolved.message,
+        });
+      }
+
+      const blocked = await ensureNotBlocked(auth.userId, resolved.conversation);
+      if (!blocked.ok) {
+        return reply.code(blocked.status).send({ error: blocked.error });
+      }
+
+      const store = await getChatStore();
+      try {
+        const message = await store.likeMessage(
+          resolved.conversation.id,
+          req.params.messageId,
+          auth.userId,
+        );
+        return { message: toPublicMessage(message, auth.userId) };
+      } catch (err) {
+        const code = (err as { code?: string }).code;
+        if (code === 'conversation_not_found') {
+          return reply.code(404).send({ error: 'conversation_not_found' });
+        }
+        if (code === 'message_not_found') {
+          return reply.code(404).send({ error: 'message_not_found' });
+        }
+        if (code === 'forbidden') {
+          return reply.code(403).send({ error: 'forbidden' });
+        }
+        throw err;
+      }
+    },
+  );
+
+  app.delete<{ Params: { id: string; messageId: string } }>(
+    '/conversations/:id/messages/:messageId/like',
+    async (req, reply) => {
+      const auth = await requireAuth(req, reply);
+      if (!auth) return;
+
+      const resolved = await resolveConversationForUser(
+        auth.userId,
+        req.params.id,
+      );
+      if (!resolved.ok) {
+        return reply.code(resolved.status).send({
+          error: resolved.error,
+          message: resolved.message,
+        });
+      }
+
+      const blocked = await ensureNotBlocked(auth.userId, resolved.conversation);
+      if (!blocked.ok) {
+        return reply.code(blocked.status).send({ error: blocked.error });
+      }
+
+      const store = await getChatStore();
+      try {
+        const message = await store.unlikeMessage(
+          resolved.conversation.id,
+          req.params.messageId,
+          auth.userId,
+        );
+        return { message: toPublicMessage(message, auth.userId) };
+      } catch (err) {
+        const code = (err as { code?: string }).code;
+        if (code === 'conversation_not_found') {
+          return reply.code(404).send({ error: 'conversation_not_found' });
+        }
+        if (code === 'message_not_found') {
+          return reply.code(404).send({ error: 'message_not_found' });
+        }
+        if (code === 'forbidden') {
+          return reply.code(403).send({ error: 'forbidden' });
+        }
+        throw err;
+      }
+    },
+  );
+
   // Back-compat stub alias from scaffold.
   app.get('/threads', async (req, reply) => {
     const auth = await requireAuth(req, reply);
     if (!auth) return;
-    // Redirect shape: prefer /conversations
     const store = await getChatStore();
     const blocks = await getBlockStore();
     const blocked = await blocks.blockedPairIds(auth.userId);

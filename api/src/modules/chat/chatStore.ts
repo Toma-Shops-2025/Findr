@@ -4,7 +4,9 @@ import type pg from 'pg';
 import { getPool } from '../db.js';
 import type {
   ConversationRecord,
+  MessageLocation,
   MessageRecord,
+  MessageWithLikes,
   SendMessageInput,
 } from './types.js';
 
@@ -20,6 +22,7 @@ export function orderedPair(userId: string, peerId: string): [string, string] {
 function messagePreview(input: SendMessageInput): string {
   const text = input.body.trim();
   if (text) return text.slice(0, 140);
+  if (input.location) return '[Location]';
   if (input.videoUrl) return '[Video]';
   if (input.imageUrl) return '[Photo]';
   return '';
@@ -49,6 +52,30 @@ function rowToConversation(row: Record<string, unknown>): ConversationRecord {
   };
 }
 
+function locationFromRow(row: Record<string, unknown>): MessageLocation | null {
+  if (row.location_lat == null || row.location_lng == null) return null;
+  const lat = Number(row.location_lat);
+  const lng = Number(row.location_lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const sharedAt =
+    row.location_shared_at instanceof Date
+      ? row.location_shared_at.toISOString()
+      : row.location_shared_at
+        ? String(row.location_shared_at)
+        : row.created_at instanceof Date
+          ? row.created_at.toISOString()
+          : String(row.created_at ?? nowIso());
+  return {
+    lat,
+    lng,
+    accuracyM:
+      row.location_accuracy_m == null || row.location_accuracy_m === ''
+        ? null
+        : Number(row.location_accuracy_m),
+    sharedAt,
+  };
+}
+
 function rowToMessage(row: Record<string, unknown>): MessageRecord {
   return {
     id: String(row.id),
@@ -63,6 +90,7 @@ function rowToMessage(row: Record<string, unknown>): MessageRecord {
       row.video_url == null || row.video_url === ''
         ? null
         : String(row.video_url),
+    location: locationFromRow(row),
     createdAt:
       row.created_at instanceof Date
         ? row.created_at.toISOString()
@@ -70,14 +98,83 @@ function rowToMessage(row: Record<string, unknown>): MessageRecord {
   };
 }
 
+function withLikes(
+  message: MessageRecord,
+  likedByMe: boolean,
+  likeCount: number,
+): MessageWithLikes {
+  return { ...message, likedByMe, likeCount };
+}
+
+function normalizeLocation(
+  input: SendMessageInput['location'],
+): MessageLocation | null {
+  if (!input) return null;
+  const lat = Number(input.lat);
+  const lng = Number(input.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  const accuracyRaw = input.accuracyM;
+  const accuracyM =
+    accuracyRaw == null || accuracyRaw === undefined
+      ? null
+      : Number(accuracyRaw);
+  return {
+    lat,
+    lng,
+    accuracyM:
+      accuracyM != null && Number.isFinite(accuracyM) && accuracyM >= 0
+        ? accuracyM
+        : null,
+    sharedAt: nowIso(),
+  };
+}
+
 class MemoryChatStore {
   private conversations = new Map<string, ConversationRecord>();
   private pairIndex = new Map<string, string>();
   private messagesByConv = new Map<string, MessageRecord[]>();
+  /** messageId -> set of userIds who liked */
+  private likes = new Map<string, Set<string>>();
 
   private pairKey(a: string, b: string): string {
     const [x, y] = orderedPair(a, b);
     return `${x}:${y}`;
+  }
+
+  private likeMeta(messageId: string, viewerId: string) {
+    const set = this.likes.get(messageId);
+    return {
+      likedByMe: Boolean(set?.has(viewerId)),
+      likeCount: set?.size ?? 0,
+    };
+  }
+
+  private assertMember(conversationId: string, userId: string): ConversationRecord {
+    const conversation = this.conversations.get(conversationId);
+    if (!conversation) {
+      throw Object.assign(new Error('conversation_not_found'), {
+        code: 'conversation_not_found',
+      });
+    }
+    if (conversation.userAId !== userId && conversation.userBId !== userId) {
+      throw Object.assign(new Error('forbidden'), { code: 'forbidden' });
+    }
+    return conversation;
+  }
+
+  private findMessage(
+    conversationId: string,
+    messageId: string,
+  ): MessageRecord {
+    const list = this.messagesByConv.get(conversationId) ?? [];
+    const message = list.find((m) => m.id === messageId);
+    if (!message) {
+      throw Object.assign(new Error('message_not_found'), {
+        code: 'message_not_found',
+      });
+    }
+    return message;
   }
 
   async listForUser(userId: string): Promise<ConversationRecord[]> {
@@ -125,30 +222,28 @@ class MemoryChatStore {
   async listMessages(
     conversationId: string,
     limit = 100,
-  ): Promise<MessageRecord[]> {
+    viewerId?: string,
+  ): Promise<MessageWithLikes[]> {
     const all = this.messagesByConv.get(conversationId) ?? [];
-    return all.slice(-Math.max(1, Math.min(limit, 200)));
+    const slice = all.slice(-Math.max(1, Math.min(limit, 200)));
+    return slice.map((m) => {
+      const meta = this.likeMeta(m.id, viewerId ?? '');
+      return withLikes(m, meta.likedByMe, meta.likeCount);
+    });
   }
 
   async sendMessage(
     conversationId: string,
     senderId: string,
     input: SendMessageInput,
-  ): Promise<MessageRecord> {
-    const conversation = this.conversations.get(conversationId);
-    if (!conversation) {
-      throw Object.assign(new Error('conversation_not_found'), {
-        code: 'conversation_not_found',
-      });
-    }
-    if (conversation.userAId !== senderId && conversation.userBId !== senderId) {
-      throw Object.assign(new Error('forbidden'), { code: 'forbidden' });
-    }
+  ): Promise<MessageWithLikes> {
+    const conversation = this.assertMember(conversationId, senderId);
 
     const body = input.body.trim();
     const imageUrl = input.imageUrl?.trim() || null;
     const videoUrl = input.videoUrl?.trim() || null;
-    if (!body && !imageUrl && !videoUrl) {
+    const location = normalizeLocation(input.location ?? null);
+    if (!body && !imageUrl && !videoUrl && !location) {
       throw Object.assign(new Error('empty_message'), { code: 'empty_message' });
     }
 
@@ -159,18 +254,55 @@ class MemoryChatStore {
       body,
       imageUrl,
       videoUrl,
+      location,
       createdAt: nowIso(),
     };
     const list = this.messagesByConv.get(conversationId) ?? [];
     list.push(message);
     this.messagesByConv.set(conversationId, list);
 
-    conversation.lastMessagePreview = messagePreview({ body, imageUrl, videoUrl });
+    conversation.lastMessagePreview = messagePreview({
+      body,
+      imageUrl,
+      videoUrl,
+      location: location
+        ? { lat: location.lat, lng: location.lng, accuracyM: location.accuracyM }
+        : null,
+    });
     conversation.lastMessageAt = message.createdAt;
     conversation.updatedAt = message.createdAt;
     this.conversations.set(conversationId, conversation);
 
-    return message;
+    return withLikes(message, false, 0);
+  }
+
+  async likeMessage(
+    conversationId: string,
+    messageId: string,
+    userId: string,
+  ): Promise<MessageWithLikes> {
+    this.assertMember(conversationId, userId);
+    const message = this.findMessage(conversationId, messageId);
+    let set = this.likes.get(messageId);
+    if (!set) {
+      set = new Set();
+      this.likes.set(messageId, set);
+    }
+    set.add(userId);
+    const meta = this.likeMeta(messageId, userId);
+    return withLikes(message, meta.likedByMe, meta.likeCount);
+  }
+
+  async unlikeMessage(
+    conversationId: string,
+    messageId: string,
+    userId: string,
+  ): Promise<MessageWithLikes> {
+    this.assertMember(conversationId, userId);
+    const message = this.findMessage(conversationId, messageId);
+    this.likes.get(messageId)?.delete(userId);
+    const meta = this.likeMeta(messageId, userId);
+    return withLikes(message, meta.likedByMe, meta.likeCount);
   }
 }
 
@@ -234,58 +366,111 @@ class PostgresChatStore {
     };
   }
 
+  private async assertMember(
+    client: pg.PoolClient | pg.Pool,
+    conversationId: string,
+    userId: string,
+  ): Promise<void> {
+    const conv = await client.query(
+      `SELECT id, user_a_id, user_b_id FROM conversations WHERE id = $1`,
+      [conversationId],
+    );
+    const row = conv.rows[0];
+    if (!row) {
+      throw Object.assign(new Error('conversation_not_found'), {
+        code: 'conversation_not_found',
+      });
+    }
+    if (row.user_a_id !== userId && row.user_b_id !== userId) {
+      throw Object.assign(new Error('forbidden'), { code: 'forbidden' });
+    }
+  }
+
   async listMessages(
     conversationId: string,
     limit = 100,
-  ): Promise<MessageRecord[]> {
+    viewerId?: string,
+  ): Promise<MessageWithLikes[]> {
     const capped = Math.max(1, Math.min(limit, 200));
     const result = await this.pool.query(
-      `SELECT id, conversation_id, sender_id, body, image_url, video_url, created_at
-       FROM messages
-       WHERE conversation_id = $1
-       ORDER BY created_at ASC
+      `SELECT m.id, m.conversation_id, m.sender_id, m.body, m.image_url, m.video_url,
+              m.location_lat, m.location_lng, m.location_accuracy_m, m.location_shared_at,
+              m.created_at,
+              COALESCE(lc.cnt, 0)::int AS like_count,
+              CASE
+                WHEN $3::uuid IS NULL THEN false
+                ELSE EXISTS (
+                  SELECT 1 FROM message_likes ml
+                  WHERE ml.message_id = m.id AND ml.user_id = $3::uuid
+                )
+              END AS liked_by_me
+       FROM messages m
+       LEFT JOIN (
+         SELECT message_id, COUNT(*)::int AS cnt
+         FROM message_likes
+         GROUP BY message_id
+       ) lc ON lc.message_id = m.id
+       WHERE m.conversation_id = $1
+       ORDER BY m.created_at ASC
        LIMIT $2`,
-      [conversationId, capped],
+      [conversationId, capped, viewerId ?? null],
     );
-    return result.rows.map(rowToMessage);
+    return result.rows.map((row) =>
+      withLikes(
+        rowToMessage(row),
+        Boolean(row.liked_by_me),
+        Number(row.like_count ?? 0),
+      ),
+    );
   }
 
   async sendMessage(
     conversationId: string,
     senderId: string,
     input: SendMessageInput,
-  ): Promise<MessageRecord> {
+  ): Promise<MessageWithLikes> {
     const body = input.body.trim();
     const imageUrl = input.imageUrl?.trim() || null;
     const videoUrl = input.videoUrl?.trim() || null;
-    if (!body && !imageUrl && !videoUrl) {
+    const location = normalizeLocation(input.location ?? null);
+    if (!body && !imageUrl && !videoUrl && !location) {
       throw Object.assign(new Error('empty_message'), { code: 'empty_message' });
     }
 
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
-      const conv = await client.query(
-        `SELECT id, user_a_id, user_b_id FROM conversations WHERE id = $1 FOR UPDATE`,
-        [conversationId],
-      );
-      const row = conv.rows[0];
-      if (!row) {
-        throw Object.assign(new Error('conversation_not_found'), {
-          code: 'conversation_not_found',
-        });
-      }
-      if (row.user_a_id !== senderId && row.user_b_id !== senderId) {
-        throw Object.assign(new Error('forbidden'), { code: 'forbidden' });
-      }
+      await this.assertMember(client, conversationId, senderId);
 
       const inserted = await client.query(
-        `INSERT INTO messages (conversation_id, sender_id, body, image_url, video_url)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, conversation_id, sender_id, body, image_url, video_url, created_at`,
-        [conversationId, senderId, body, imageUrl, videoUrl],
+        `INSERT INTO messages (
+           conversation_id, sender_id, body, image_url, video_url,
+           location_lat, location_lng, location_accuracy_m, location_shared_at
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING id, conversation_id, sender_id, body, image_url, video_url,
+                   location_lat, location_lng, location_accuracy_m, location_shared_at,
+                   created_at`,
+        [
+          conversationId,
+          senderId,
+          body,
+          imageUrl,
+          videoUrl,
+          location?.lat ?? null,
+          location?.lng ?? null,
+          location?.accuracyM ?? null,
+          location?.sharedAt ?? null,
+        ],
       );
-      const preview = messagePreview({ body, imageUrl, videoUrl });
+      const preview = messagePreview({
+        body,
+        imageUrl,
+        videoUrl,
+        location: location
+          ? { lat: location.lat, lng: location.lng, accuracyM: location.accuracyM }
+          : null,
+      });
       await client.query(
         `UPDATE conversations
          SET last_message_preview = $2,
@@ -295,13 +480,91 @@ class PostgresChatStore {
         [conversationId, preview],
       );
       await client.query('COMMIT');
-      return rowToMessage(inserted.rows[0]);
+      return withLikes(rowToMessage(inserted.rows[0]), false, 0);
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
     } finally {
       client.release();
     }
+  }
+
+  private async loadMessageWithLikes(
+    conversationId: string,
+    messageId: string,
+    viewerId: string,
+  ): Promise<MessageWithLikes> {
+    const result = await this.pool.query(
+      `SELECT m.id, m.conversation_id, m.sender_id, m.body, m.image_url, m.video_url,
+              m.location_lat, m.location_lng, m.location_accuracy_m, m.location_shared_at,
+              m.created_at,
+              (SELECT COUNT(*)::int FROM message_likes ml WHERE ml.message_id = m.id) AS like_count,
+              EXISTS (
+                SELECT 1 FROM message_likes ml2
+                WHERE ml2.message_id = m.id AND ml2.user_id = $3
+              ) AS liked_by_me
+       FROM messages m
+       WHERE m.id = $1 AND m.conversation_id = $2
+       LIMIT 1`,
+      [messageId, conversationId, viewerId],
+    );
+    const row = result.rows[0];
+    if (!row) {
+      throw Object.assign(new Error('message_not_found'), {
+        code: 'message_not_found',
+      });
+    }
+    return withLikes(
+      rowToMessage(row),
+      Boolean(row.liked_by_me),
+      Number(row.like_count ?? 0),
+    );
+  }
+
+  async likeMessage(
+    conversationId: string,
+    messageId: string,
+    userId: string,
+  ): Promise<MessageWithLikes> {
+    await this.assertMember(this.pool, conversationId, userId);
+    const exists = await this.pool.query(
+      `SELECT id FROM messages WHERE id = $1 AND conversation_id = $2 LIMIT 1`,
+      [messageId, conversationId],
+    );
+    if (!exists.rows[0]) {
+      throw Object.assign(new Error('message_not_found'), {
+        code: 'message_not_found',
+      });
+    }
+    await this.pool.query(
+      `INSERT INTO message_likes (message_id, user_id)
+       VALUES ($1, $2)
+       ON CONFLICT (message_id, user_id) DO NOTHING`,
+      [messageId, userId],
+    );
+    return this.loadMessageWithLikes(conversationId, messageId, userId);
+  }
+
+  async unlikeMessage(
+    conversationId: string,
+    messageId: string,
+    userId: string,
+  ): Promise<MessageWithLikes> {
+    await this.assertMember(this.pool, conversationId, userId);
+    const exists = await this.pool.query(
+      `SELECT id FROM messages WHERE id = $1 AND conversation_id = $2 LIMIT 1`,
+      [messageId, conversationId],
+    );
+    if (!exists.rows[0]) {
+      throw Object.assign(new Error('message_not_found'), {
+        code: 'message_not_found',
+      });
+    }
+    await this.pool.query(
+      `DELETE FROM message_likes WHERE message_id = $1 AND user_id = $2`,
+      [messageId, userId],
+    );
+    return this.loadMessageWithLikes(conversationId, messageId, userId);
   }
 }
 

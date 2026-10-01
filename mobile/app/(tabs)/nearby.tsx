@@ -1,40 +1,269 @@
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import * as Location from 'expo-location';
 
 import { colors, radii, spacing, typography } from '@/constants/theme';
+import { apiFetch } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+import { DEMO_COORDS, fuzzLatLng } from '@/lib/locationPrivacy';
+import { primaryPhotoUrl } from '@/lib/mediaUrl';
+import type { NearbyCard } from '@/lib/types';
 
-/** Placeholder nearby profiles until geo API is wired. */
-const PLACEHOLDERS = [
-  { id: '1', name: 'Alex', age: 28, distance: '~0.4 mi', online: true },
-  { id: '2', name: 'Jordan', age: 31, distance: '~0.8 mi', online: false },
-  { id: '3', name: 'Sam', age: 24, distance: '~1.2 mi', online: true },
-  { id: '4', name: 'Riley', age: 27, distance: '~1.5 mi', online: false },
-  { id: '5', name: 'Casey', age: 33, distance: '~2.1 mi', online: true },
-  { id: '6', name: 'Morgan', age: 29, distance: '~2.4 mi', online: false },
-];
+type NearbyResponse = {
+  results: NearbyCard[];
+  mode?: string;
+  note?: string;
+  error?: string;
+  message?: string;
+};
+
+type Coords = { latitude: number; longitude: number; accuracyM?: number };
+
+async function resolveConsentedCoords(): Promise<{
+  coords: Coords;
+  source: 'gps' | 'demo';
+  permissionDenied: boolean;
+}> {
+  const current = await Location.getForegroundPermissionsAsync();
+  let status = current.status;
+  if (status !== 'granted') {
+    const asked = await Location.requestForegroundPermissionsAsync();
+    status = asked.status;
+  }
+
+  if (status !== 'granted') {
+    return {
+      coords: { ...DEMO_COORDS },
+      source: 'demo',
+      permissionDenied: true,
+    };
+  }
+
+  try {
+    const pos = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+    return {
+      coords: {
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+        accuracyM:
+          typeof pos.coords.accuracy === 'number'
+            ? pos.coords.accuracy
+            : undefined,
+      },
+      source: 'gps',
+      permissionDenied: false,
+    };
+  } catch {
+    return {
+      coords: { ...DEMO_COORDS },
+      source: 'demo',
+      permissionDenied: false,
+    };
+  }
+}
+
+
+function NearbyPhotoTile({
+  displayName,
+  photoUrls,
+  online,
+}: {
+  displayName: string;
+  photoUrls: string[] | null | undefined;
+  online?: boolean;
+}) {
+  const uri = primaryPhotoUrl(photoUrls);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [uri]);
+
+  const showImage = Boolean(uri) && !failed;
+
+  return (
+    <View style={styles.photo}>
+      {showImage ? (
+        <Image
+          source={{ uri: uri! }}
+          style={styles.photoImage}
+          resizeMode="cover"
+          onError={() => setFailed(true)}
+          accessibilityIgnoresInvertColors
+        />
+      ) : (
+        <Text style={styles.initial}>
+          {(displayName[0] || '?').toUpperCase()}
+        </Text>
+      )}
+      {online ? <View style={styles.onlineDot} /> : null}
+    </View>
+  );
+}
 
 export default function NearbyScreen() {
+  const { accessToken } = useAuth();
+  const [items, setItems] = useState<NearbyCard[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [modeNote, setModeNote] = useState<string | null>(null);
+
+  const loadNearby = useCallback(
+    async (isRefresh = false) => {
+      if (!accessToken) {
+        setError('Sign in to see people nearby.');
+        setLoading(false);
+        return;
+      }
+
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
+      setError(null);
+
+      try {
+        const { coords, source, permissionDenied } =
+          await resolveConsentedCoords();
+        const fuzzed = fuzzLatLng(coords.latitude, coords.longitude);
+
+        await apiFetch('/geo/location', {
+          method: 'POST',
+          token: accessToken,
+          body: JSON.stringify({
+            latitude: fuzzed.latitude,
+            longitude: fuzzed.longitude,
+            ...(coords.accuracyM != null
+              ? { accuracyM: coords.accuracyM }
+              : {}),
+          }),
+        });
+
+        const data = await apiFetch<NearbyResponse>(
+          '/geo/nearby?radiusKm=50&limit=50',
+          { token: accessToken },
+        );
+        setItems(data.results ?? []);
+
+        const notes: string[] = [];
+        if (permissionDenied) {
+          notes.push(
+            'Location permission off — using demo area so you can still test Nearby.',
+          );
+        } else if (source === 'demo') {
+          notes.push('GPS unavailable — using demo area.');
+        }
+        if (data.mode === 'memory') {
+          notes.push(
+            data.note ??
+              'Demo geo (in-memory). Samples reset if the API restarts.',
+          );
+        }
+        setModeNote(notes.length ? notes.join(' ') : null);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Could not load nearby profiles';
+        setError(message);
+        setItems([]);
+        setModeNote(null);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [accessToken],
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      loadNearby();
+    }, [loadNearby]),
+  );
+
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator color={colors.coral} />
+        <Text style={styles.sub}>Finding people near you…</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.sub}>
         People near you · distances are approximate
       </Text>
+      {modeNote ? <Text style={styles.note}>{modeNote}</Text> : null}
+      {error ? (
+        <View style={styles.stateBox}>
+          <Text style={styles.error}>{error}</Text>
+          <Pressable style={styles.retry} onPress={() => loadNearby()}>
+            <Text style={styles.retryText}>Try again</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {!error && items.length === 0 ? (
+        <View style={styles.stateBox}>
+          <Text style={styles.emptyTitle}>Nobody nearby yet</Text>
+          <Text style={styles.emptyBody}>
+            You are the only visible person in this area right now. Pull to
+            refresh after friends join — or run the SAMPLE seed script so test
+            profiles appear.
+          </Text>
+          <Pressable style={styles.retry} onPress={() => loadNearby(true)}>
+            <Text style={styles.retryText}>Refresh</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       <FlatList
-        data={PLACEHOLDERS}
-        keyExtractor={(item) => item.id}
+        data={items}
+        keyExtractor={(item) => item.userId}
         numColumns={2}
         columnWrapperStyle={styles.row}
         contentContainerStyle={styles.list}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadNearby(true)}
+            tintColor={colors.coral}
+          />
+        }
         renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={styles.photo}>
-              <Text style={styles.initial}>{item.name[0]}</Text>
-              {item.online ? <View style={styles.onlineDot} /> : null}
-            </View>
+          <Pressable
+            style={styles.card}
+            onPress={() => router.push(`/user/${item.userId}`)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${item.displayName} profile`}
+          >
+            <NearbyPhotoTile
+              displayName={item.displayName}
+              photoUrls={item.photoUrls}
+              online={item.online}
+            />
             <Text style={styles.name}>
-              {item.name}, {item.age}
+              {item.displayName}, {item.age}
             </Text>
-            <Text style={styles.meta}>{item.distance}</Text>
-          </View>
+            <Text style={styles.meta}>{item.distanceLabel}</Text>
+            {item.lookingFor?.length ? (
+              <Text style={styles.meta} numberOfLines={1}>
+                {item.lookingFor.join(' · ')}
+              </Text>
+            ) : null}
+          </Pressable>
         )}
       />
     </View>
@@ -46,13 +275,62 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.ink,
   },
+  centered: {
+    flex: 1,
+    backgroundColor: colors.ink,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
+  },
   sub: {
     fontFamily: typography.body,
     color: colors.mistMuted,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.sm,
     fontSize: 13,
+  },
+  note: {
+    fontFamily: typography.body,
+    color: colors.teal,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+    fontSize: 12,
+  },
+  stateBox: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
+  },
+  error: {
+    fontFamily: typography.body,
+    color: colors.danger,
+    fontSize: 14,
+  },
+  emptyTitle: {
+    fontFamily: typography.heading,
+    color: colors.mist,
+    fontSize: 18,
+  },
+  emptyBody: {
+    fontFamily: typography.body,
+    color: colors.mistMuted,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  retry: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.inkElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  retryText: {
+    fontFamily: typography.bodyMedium,
+    color: colors.coral,
+    fontSize: 14,
   },
   list: {
     paddingHorizontal: spacing.md,
@@ -74,6 +352,13 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  photoImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
   },
   initial: {
     fontFamily: typography.brand,

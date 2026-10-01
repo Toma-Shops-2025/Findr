@@ -1,17 +1,7 @@
-import {
-  Fraunces_700Bold,
-} from '@expo-google-fonts/fraunces';
-import {
-  Outfit_400Regular,
-  Outfit_500Medium,
-  Outfit_600SemiBold,
-} from '@expo-google-fonts/outfit';
-import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
 
 import { colors } from '@/constants/theme';
 import { AuthProvider } from '@/lib/auth';
@@ -22,29 +12,22 @@ export const unstable_settings = {
   initialRouteName: 'index',
 };
 
-SplashScreen.preventAutoHideAsync();
-
+/**
+ * Launch-crash hard fix (EAS 6e8a9c28 / splash → "Findr keeps stopping"):
+ * - Do NOT call SplashScreen.preventAutoHideAsync() (held native splash open).
+ * - Do NOT gate first paint on useFonts / Google font packages.
+ * - Do NOT throw on font errors (that hard-crashes after splash).
+ * - Do NOT side-effect import react-native-reanimated here (unused; Reanimated 4
+ *   + Worklets init is a known New-Arch launch crash surface).
+ * - Always hideAsync on mount; never return null — paint shell on frame 1.
+ * - chat/[id], camera, album stay route-local; not imported at root.
+ */
 export default function RootLayout() {
-  const [loaded, error] = useFonts({
-    Fraunces_700Bold,
-    Outfit_400Regular,
-    Outfit_500Medium,
-    Outfit_600SemiBold,
-  });
-
   useEffect(() => {
-    if (error) throw error;
-  }, [error]);
-
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded]);
-
-  if (!loaded) {
-    return null;
-  }
+    SplashScreen.hideAsync().catch(() => {
+      // Already hidden or native module unavailable — ignore.
+    });
+  }, []);
 
   return (
     <AuthProvider>
@@ -53,7 +36,7 @@ export default function RootLayout() {
         screenOptions={{
           headerStyle: { backgroundColor: colors.ink },
           headerTintColor: colors.mist,
-          headerTitleStyle: { fontFamily: 'Outfit_600SemiBold' },
+          headerTitleStyle: { fontWeight: '600' },
           contentStyle: { backgroundColor: colors.ink },
         }}
       >
@@ -64,6 +47,12 @@ export default function RootLayout() {
           name="chat/[id]"
           options={{ title: 'Chat', presentation: 'card' }}
         />
+        <Stack.Screen
+          name="user/[id]"
+          options={{ title: 'Profile', presentation: 'card' }}
+        />
+        <Stack.Screen name="camera" options={{ title: 'Camera', presentation: 'modal' }} />
+        <Stack.Screen name="album" options={{ title: 'Album', presentation: 'modal' }} />
       </Stack>
     </AuthProvider>
   );

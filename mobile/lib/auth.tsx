@@ -41,34 +41,61 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+/** Cap session restore so hung SecureStore /auth/me cannot block first paint. */
+const AUTH_BOOT_TIMEOUT_MS = 3000;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    let finished = false;
+
+    const finish = () => {
+      if (cancelled || finished) return;
+      finished = true;
+      setReady(true);
+    };
+
+    const timer = setTimeout(() => {
+      console.warn(
+        `Findr auth boot timed out after ${AUTH_BOOT_TIMEOUT_MS}ms; continuing without restored session`,
+      );
+      finish();
+    }, AUTH_BOOT_TIMEOUT_MS);
+
     (async () => {
-      const stored = await loadSession();
-      if (!stored) {
-        if (!cancelled) setReady(true);
-        return;
-      }
       try {
-        const me = await apiFetch<{ user: AuthUser }>('/auth/me', {
-          token: stored.accessToken,
-        });
-        const next = { accessToken: stored.accessToken, user: me.user };
-        await saveSession(next);
-        if (!cancelled) setSession(next);
-      } catch {
-        await clearSession();
+        const stored = await loadSession();
+        if (cancelled) return;
+        if (!stored) {
+          finish();
+          return;
+        }
+        try {
+          const me = await apiFetch<{ user: AuthUser }>('/auth/me', {
+            token: stored.accessToken,
+          });
+          const next = { accessToken: stored.accessToken, user: me.user };
+          await saveSession(next);
+          if (!cancelled) setSession(next);
+        } catch {
+          await clearSession();
+          if (!cancelled) setSession(null);
+        }
+      } catch (err) {
+        console.warn('Findr auth boot failed; continuing logged out', err);
         if (!cancelled) setSession(null);
       } finally {
-        if (!cancelled) setReady(true);
+        clearTimeout(timer);
+        finish();
       }
     })();
+
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, []);
 

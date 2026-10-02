@@ -1,5 +1,4 @@
 import { Platform } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
 
 const TOKEN_KEY = 'findr.accessToken';
 const USER_KEY = 'findr.user';
@@ -23,8 +22,8 @@ export type AuthSession = {
  * native module is healthy, and falls back to localStorage (web) or in-memory
  * when SecureStore is missing, mismatched, or throws.
  *
- * Never throws from get/set/delete — web (`getValueWithKeyAsync is not a
- * function`) and broken native bridges must not crash auth boot.
+ * Never throws from get/set/delete — and never `import` SecureStore at module
+ * top-level (a hard require/eval of a broken native bridge must not kill boot).
  */
 
 /** Process-local fallback when neither SecureStore nor localStorage works. */
@@ -35,6 +34,42 @@ const memoryStore = new Map<string, string>();
  * (native module mismatch). Avoids repeated broken native calls.
  */
 let secureStoreDisabled = Platform.OS === 'web';
+
+type SecureStoreModule = {
+  isAvailableAsync?: () => Promise<boolean>;
+  getItemAsync: (key: string) => Promise<string | null>;
+  setItemAsync: (key: string, value: string) => Promise<void>;
+  deleteItemAsync: (key: string) => Promise<void>;
+};
+
+let secureStoreModule: SecureStoreModule | null | undefined;
+
+/** Lazy require — never throws out of this helper. */
+function getSecureStore(): SecureStoreModule | null {
+  if (secureStoreDisabled) return null;
+  if (secureStoreModule !== undefined) return secureStoreModule;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('expo-secure-store') as SecureStoreModule;
+    if (
+      !mod ||
+      typeof mod.getItemAsync !== 'function' ||
+      typeof mod.setItemAsync !== 'function' ||
+      typeof mod.deleteItemAsync !== 'function'
+    ) {
+      secureStoreDisabled = true;
+      secureStoreModule = null;
+      return null;
+    }
+    secureStoreModule = mod;
+    return mod;
+  } catch (err) {
+    console.warn('SecureStore module load failed; using fallback', err);
+    secureStoreDisabled = true;
+    secureStoreModule = null;
+    return null;
+  }
+}
 
 function canUseLocalStorage(): boolean {
   try {
@@ -51,6 +86,8 @@ function canUseLocalStorage(): boolean {
 
 async function isSecureStoreUsable(): Promise<boolean> {
   if (secureStoreDisabled) return false;
+  const SecureStore = getSecureStore();
+  if (!SecureStore) return false;
   try {
     if (typeof SecureStore.isAvailableAsync === 'function') {
       const available = await SecureStore.isAvailableAsync();
@@ -108,7 +145,8 @@ async function fallbackDelete(key: string): Promise<void> {
 async function safeGet(key: string): Promise<string | null> {
   try {
     if (await isSecureStoreUsable()) {
-      return await SecureStore.getItemAsync(key);
+      const SecureStore = getSecureStore();
+      if (SecureStore) return await SecureStore.getItemAsync(key);
     }
   } catch (err) {
     disableSecureStore(err, 'get', key);
@@ -124,8 +162,11 @@ async function safeGet(key: string): Promise<string | null> {
 async function safeSet(key: string, value: string): Promise<void> {
   try {
     if (await isSecureStoreUsable()) {
-      await SecureStore.setItemAsync(key, value);
-      return;
+      const SecureStore = getSecureStore();
+      if (SecureStore) {
+        await SecureStore.setItemAsync(key, value);
+        return;
+      }
     }
   } catch (err) {
     disableSecureStore(err, 'set', key);
@@ -140,8 +181,11 @@ async function safeSet(key: string, value: string): Promise<void> {
 async function safeDelete(key: string): Promise<void> {
   try {
     if (await isSecureStoreUsable()) {
-      await SecureStore.deleteItemAsync(key);
-      return;
+      const SecureStore = getSecureStore();
+      if (SecureStore) {
+        await SecureStore.deleteItemAsync(key);
+        return;
+      }
     }
   } catch (err) {
     disableSecureStore(err, 'delete', key);

@@ -7,21 +7,20 @@
     "icon": "./assets/images/icon.png",
     "scheme": "findr",
     "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.findr.mobile"
     },
     "android": {
       "package": "app.findr.mobile",
-      "versionCode": 3,
       "adaptiveIcon": {
         "backgroundColor": "#12151C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false,
-      "softwareKeyboardLayoutMode": "resize"
+      "predictiveBackGestureEnabled": false
     },
     "web": {
       "bundler": "metro",
@@ -30,6 +29,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-font",
       [
         "expo-splash-screen",
         {
@@ -39,26 +39,10 @@
         }
       ],
       "expo-secure-store",
-      "./plugins/withDevCleartextTraffic.js",
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "Findr lets you pick a photo or short video to send. Media is uploaded to Findr only and is not saved to your phone gallery."
-        }
-      ],
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Findr uses an in-app camera. Photos and short videos stay inside Findr -- not your phone gallery.",
-          "microphonePermission": "Findr uses the mic for short videos (max 30 seconds) that stay inside Findr.",
-          "recordAudioAndroid": true
-        }
-      ],
-      "expo-av",
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Findr uses your location to share an approximate pin in chat and for Nearby. Location is not saved to your phone gallery."
+          "locationWhenInUsePermission": "Findr uses your approximate location to show people nearby."
         }
       ]
     ],
@@ -67,9 +51,9 @@
     },
     "extra": {
       "eas": {
-        "projectId": "fca40da4-74a0-4eba-83e2-ef6155353a86"
+        "projectId": "todo-replace-with-eas-project-id"
       },
-      "apiUrl": "https://api.myfindr.fun"
+      "apiUrl": "http://localhost:4000"
     }
   }
 }

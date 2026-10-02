@@ -13,14 +13,15 @@ export const unstable_settings = {
 };
 
 /**
- * Launch-crash hard fix (EAS 6e8a9c28 / splash → "Findr keeps stopping"):
+ * Splash-crash v2 (post-f2dd889 still "keeps stopping"):
  * - Do NOT call SplashScreen.preventAutoHideAsync() (held native splash open).
  * - Do NOT gate first paint on useFonts / Google font packages.
  * - Do NOT throw on font errors (that hard-crashes after splash).
- * - Do NOT side-effect import react-native-reanimated here (unused; Reanimated 4
- *   + Worklets init is a known New-Arch launch crash surface).
+ * - Do NOT side-effect import react-native-reanimated (also removed from
+ *   package.json so New Arch cannot still init Worklets via autolink).
  * - Always hideAsync on mount; never return null — paint shell on frame 1.
  * - chat/[id], camera, album stay route-local; not imported at root.
+ * - Alternate-app-icons plugin temporarily removed from app.json (activity-alias risk).
  */
 export default function RootLayout() {
   useEffect(() => {

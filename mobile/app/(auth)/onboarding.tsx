@@ -2,7 +2,10 @@ import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -10,39 +13,28 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PasswordField } from '@/components/PasswordField';
 import { colors, radii, spacing, typography } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
 
-function isAdult(dobIso: string): boolean {
-  const dob = new Date(dobIso);
-  if (Number.isNaN(dob.getTime())) return false;
-  const today = new Date();
-  let age = today.getFullYear() - dob.getFullYear();
-  const m = today.getMonth() - dob.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age -= 1;
-  return age >= 18;
-}
-
 /**
- * Signup + 18+ age gate + legal acceptances.
+ * Signup + 18+ age gate + legal acceptances (no DOB on MVP signup).
  * JWT session stored in SecureStore after successful signup.
+ *
+ * Scroll + keyboard avoidance so Create account stays reachable on short
+ * screens (e.g. Galaxy S9) when the soft keyboard is open.
  */
 export default function OnboardingScreen() {
   const { signup } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [dob, setDob] = useState('');
   const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const createAccount = async () => {
     if (!accepted) {
-      setError('Please accept the Terms and Privacy Policy.');
-      return;
-    }
-    if (!isAdult(dob)) {
-      setError('Findr is for adults 18+. Enter a valid date of birth (YYYY-MM-DD).');
+      setError('Confirm you are 18+ and accept the Terms and Privacy Policy.');
       return;
     }
     if (password.length < 8) {
@@ -55,7 +47,7 @@ export default function OnboardingScreen() {
       await signup({
         email: email.trim(),
         password,
-        dateOfBirth: dob,
+        acceptedAgeGate: true,
         tosAccepted: true,
         privacyAccepted: true,
       });
@@ -63,88 +55,107 @@ export default function OnboardingScreen() {
     } catch (err) {
       const code = (err as { code?: string }).code;
       if (code === 'email_taken') setError('That email is already registered. Log in instead.');
-      else if (code === 'underage') setError('Findr is for adults 18+ only.');
-      else setError((err as Error).message || 'Could not create account. Is the API running?');
+      else if (code === 'underage' || code === 'age_gate_required') {
+        setError('Findr is for adults 18+ only.');
+      } else if (code === 'legal_required') {
+        setError('Please accept the Terms and Privacy Policy.');
+      } else setError((err as Error).message || 'Could not create account. Is the API running?');
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.heroGlow} />
-      <View style={styles.content}>
-        <Text style={styles.brand}>Findr</Text>
-        <Text style={styles.headline}>Meet people nearby — on your terms.</Text>
-        <Text style={styles.support}>
-          Inclusive dating and hookups for adults of every orientation. Confirm you
-          are 18+ to create an account.
-        </Text>
-
-        <Text style={styles.label}>Email</Text>
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          placeholder="you@email.com"
-          placeholderTextColor={colors.mistMuted}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          autoComplete="email"
-          style={styles.input}
-        />
-
-        <Text style={styles.label}>Password</Text>
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          placeholder="At least 8 characters"
-          placeholderTextColor={colors.mistMuted}
-          secureTextEntry
-          autoCapitalize="none"
-          style={styles.input}
-        />
-
-        <Text style={styles.label}>Date of birth</Text>
-        <TextInput
-          value={dob}
-          onChangeText={setDob}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={colors.mistMuted}
-          autoCapitalize="none"
-          keyboardType="numbers-and-punctuation"
-          style={styles.input}
-        />
-
-        <Pressable
-          onPress={() => setAccepted((v) => !v)}
-          style={styles.checkRow}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: accepted }}
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+      >
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+          bounces
         >
-          <View style={[styles.checkbox, accepted && styles.checkboxOn]} />
-          <Text style={styles.checkText}>
-            I am 18+ and accept the Terms of Service and Privacy Policy.
-          </Text>
-        </Pressable>
+          <View style={styles.heroGlow} />
+          <View style={styles.content}>
+            <Text style={styles.brand}>Findr</Text>
+            <Text style={styles.headline}>Meet people nearby — on your terms.</Text>
+            <Text style={styles.support}>
+              Inclusive dating and hookups for adults of every orientation. Confirm you
+              are 18+ to create an account.
+            </Text>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder="you@email.com"
+              placeholderTextColor={colors.mistMuted}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              autoComplete="email"
+              style={styles.input}
+              returnKeyType="next"
+            />
 
-        <Pressable
-          style={[styles.cta, busy && styles.ctaDisabled]}
-          onPress={createAccount}
-          disabled={busy}
-        >
-          {busy ? (
-            <ActivityIndicator color={colors.ink} />
-          ) : (
-            <Text style={styles.ctaText}>Create account</Text>
-          )}
-        </Pressable>
+            <Text style={styles.label}>Password</Text>
+            <PasswordField
+              value={password}
+              onChangeText={setPassword}
+              placeholder="At least 8 characters"
+              returnKeyType="done"
+            />
 
-        <Link href="/(auth)/login" style={styles.link}>
-          Already have an account? Log in
-        </Link>
-      </View>
+            <Pressable
+              onPress={() => setAccepted((v) => !v)}
+              style={styles.checkRow}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: accepted }}
+            >
+              <View style={[styles.checkbox, accepted && styles.checkboxOn]} />
+              <Text style={styles.checkText}>
+                I am 18+ and accept the{' '}
+                <Text
+                  style={styles.inlineLink}
+                  onPress={() => router.push('/legal/terms')}
+                >
+                  Terms of Service
+                </Text>
+                {' '}and{' '}
+                <Text
+                  style={styles.inlineLink}
+                  onPress={() => router.push('/legal/privacy')}
+                >
+                  Privacy Policy
+                </Text>
+                .
+              </Text>
+            </Pressable>
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            <Pressable
+              style={[styles.cta, busy && styles.ctaDisabled]}
+              onPress={createAccount}
+              disabled={busy}
+            >
+              {busy ? (
+                <ActivityIndicator color={colors.ink} />
+              ) : (
+                <Text style={styles.ctaText}>Create account</Text>
+              )}
+            </Pressable>
+
+            <Link href="/(auth)/login" style={styles.link}>
+              Already have an account? Log in
+            </Link>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -153,6 +164,13 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.ink,
+  },
+  flex: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: spacing.xl * 2,
   },
   heroGlow: {
     position: 'absolute',
@@ -165,7 +183,6 @@ const styles = StyleSheet.create({
     opacity: 0.18,
   },
   content: {
-    flex: 1,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xl * 2,
     gap: spacing.md,
@@ -232,6 +249,10 @@ const styles = StyleSheet.create({
     color: colors.mist,
     lineHeight: 20,
   },
+  inlineLink: {
+    color: colors.teal,
+    textDecorationLine: 'underline',
+  },
   error: {
     fontFamily: typography.body,
     color: colors.danger,
@@ -254,6 +275,7 @@ const styles = StyleSheet.create({
   },
   link: {
     marginTop: spacing.sm,
+    marginBottom: spacing.lg,
     fontFamily: typography.bodyMedium,
     color: colors.teal,
     fontSize: 15,

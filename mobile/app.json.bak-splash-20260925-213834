@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "app.findr.mobile",
-      "versionCode": 3,
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#12151C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -41,25 +41,33 @@
       "expo-secure-store",
       "./plugins/withDevCleartextTraffic.js",
       [
-        "expo-image-picker",
-        {
-          "photosPermission": "Findr lets you pick a photo or short video to send. Media is uploaded to Findr only and is not saved to your phone gallery."
-        }
-      ],
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Findr uses an in-app camera. Photos and short videos stay inside Findr -- not your phone gallery.",
-          "microphonePermission": "Findr uses the mic for short videos (max 30 seconds) that stay inside Findr.",
-          "recordAudioAndroid": true
-        }
-      ],
-      "expo-av",
-      [
-        "expo-location",
-        {
-          "locationWhenInUsePermission": "Findr uses your location to share an approximate pin in chat and for Nearby. Location is not saved to your phone gallery."
-        }
+        "expo-alternate-app-icons",
+        [
+          {
+            "name": "Calculator",
+            "ios": "./assets/images/privacy-icons/icon-calculator.png",
+            "android": {
+              "foregroundImage": "./assets/images/privacy-icons/icon-calculator-foreground.png",
+              "backgroundColor": "#2D3036"
+            }
+          },
+          {
+            "name": "Weather",
+            "ios": "./assets/images/privacy-icons/icon-weather.png",
+            "android": {
+              "foregroundImage": "./assets/images/privacy-icons/icon-weather-foreground.png",
+              "backgroundColor": "#5AA0DC"
+            }
+          },
+          {
+            "name": "Notes",
+            "ios": "./assets/images/privacy-icons/icon-notes.png",
+            "android": {
+              "foregroundImage": "./assets/images/privacy-icons/icon-notes-foreground.png",
+              "backgroundColor": "#373A40"
+            }
+          }
+        ]
       ]
     ],
     "experiments": {

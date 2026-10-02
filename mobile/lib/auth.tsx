@@ -8,7 +8,6 @@ import {
   type ReactNode,
 } from 'react';
 
-import { apiFetch } from '@/lib/api';
 import {
   clearSession,
   loadSession,
@@ -16,6 +15,19 @@ import {
   type AuthSession,
   type AuthUser,
 } from '@/lib/session';
+
+/**
+ * AuthProvider must not pull heavy native modules (expo-file-system via api.ts)
+ * at module eval time. apiFetch is required lazily inside signup/login/logout
+ * and the optional /auth/me refresh after SecureStore restore.
+ */
+async function apiFetchLazy<T>(
+  path: string,
+  options: RequestInit & { token?: string | null } = {},
+): Promise<T> {
+  const { apiFetch } = await import('@/lib/api');
+  return apiFetch<T>(path, options);
+}
 
 type SignupInput = {
   email: string;
@@ -74,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
         try {
-          const me = await apiFetch<{ user: AuthUser }>('/auth/me', {
+          const me = await apiFetchLazy<{ user: AuthUser }>('/auth/me', {
             token: stored.accessToken,
           });
           const next = { accessToken: stored.accessToken, user: me.user };
@@ -100,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signup = useCallback(async (input: SignupInput) => {
-    const data = await apiFetch<AuthSession>('/auth/signup', {
+    const data = await apiFetchLazy<AuthSession>('/auth/signup', {
       method: 'POST',
       body: JSON.stringify(input),
     });
@@ -109,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (input: LoginInput) => {
-    const data = await apiFetch<AuthSession>('/auth/login', {
+    const data = await apiFetchLazy<AuthSession>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(input),
     });
@@ -121,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = session?.accessToken;
     try {
       if (token) {
-        await apiFetch('/auth/logout', { method: 'POST', token });
+        await apiFetchLazy('/auth/logout', { method: 'POST', token });
       }
     } catch {
       // Client still clears local session.

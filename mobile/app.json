@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "app.findr.mobile",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "backgroundColor": "#12151C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -60,7 +60,8 @@
         {
           "locationWhenInUsePermission": "Findr uses your location to share an approximate pin in chat and for Nearby. Location is not saved to your phone gallery."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true

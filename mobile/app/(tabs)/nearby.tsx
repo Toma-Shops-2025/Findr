@@ -1,387 +1,54 @@
-import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Image,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
-import * as Location from 'expo-location';
-
-import { colors, radii, spacing, typography } from '@/constants/theme';
-import { apiFetch } from '@/lib/api';
-import { useAuth } from '@/lib/auth';
-import { DEMO_COORDS, fuzzLatLng } from '@/lib/locationPrivacy';
-import { primaryPhotoUrl } from '@/lib/mediaUrl';
-import type { NearbyCard } from '@/lib/types';
-
-type NearbyResponse = {
-  results: NearbyCard[];
-  mode?: string;
-  note?: string;
-  error?: string;
-  message?: string;
-};
-
-type Coords = { latitude: number; longitude: number; accuracyM?: number };
-
-async function resolveConsentedCoords(): Promise<{
-  coords: Coords;
-  source: 'gps' | 'demo';
-  permissionDenied: boolean;
-}> {
-  const current = await Location.getForegroundPermissionsAsync();
-  let status = current.status;
-  if (status !== 'granted') {
-    const asked = await Location.requestForegroundPermissionsAsync();
-    status = asked.status;
-  }
-
-  if (status !== 'granted') {
-    return {
-      coords: { ...DEMO_COORDS },
-      source: 'demo',
-      permissionDenied: true,
-    };
-  }
-
-  try {
-    const pos = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
-    return {
-      coords: {
-        latitude: pos.coords.latitude,
-        longitude: pos.coords.longitude,
-        accuracyM:
-          typeof pos.coords.accuracy === 'number'
-            ? pos.coords.accuracy
-            : undefined,
-      },
-      source: 'gps',
-      permissionDenied: false,
-    };
-  } catch {
-    return {
-      coords: { ...DEMO_COORDS },
-      source: 'demo',
-      permissionDenied: false,
-    };
-  }
-}
-
-
-function NearbyPhotoTile({
-  displayName,
-  photoUrls,
-  online,
-}: {
-  displayName: string;
-  photoUrls: string[] | null | undefined;
-  online?: boolean;
-}) {
-  const uri = primaryPhotoUrl(photoUrls);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    setFailed(false);
-  }, [uri]);
-
-  const showImage = Boolean(uri) && !failed;
-
-  return (
-    <View style={styles.photo}>
-      {showImage ? (
-        <Image
-          source={{ uri: uri! }}
-          style={styles.photoImage}
-          resizeMode="cover"
-          onError={() => setFailed(true)}
-          accessibilityIgnoresInvertColors
-        />
-      ) : (
-        <Text style={styles.initial}>
-          {(displayName[0] || '?').toUpperCase()}
-        </Text>
-      )}
-      {online ? <View style={styles.onlineDot} /> : null}
-    </View>
-  );
-}
-
+import { useCallback, useState } from "react";
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { router, useFocusEffect } from "expo-router";
+import { colors, radii, spacing, typography } from "@/constants/theme";
+import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { DEMO_COORDS, fuzzLatLng } from "@/lib/locationPrivacy";
 export default function NearbyScreen() {
   const { accessToken } = useAuth();
-  const [items, setItems] = useState<NearbyCard[]>([]);
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [modeNote, setModeNote] = useState<string | null>(null);
-
-  const loadNearby = useCallback(
-    async (isRefresh = false) => {
-      if (!accessToken) {
-        setError('Sign in to see people nearby.');
-        setLoading(false);
-        return;
-      }
-
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
-      setError(null);
-
-      try {
-        const { coords, source, permissionDenied } =
-          await resolveConsentedCoords();
-        const fuzzed = fuzzLatLng(coords.latitude, coords.longitude);
-
-        await apiFetch('/geo/location', {
-          method: 'POST',
-          token: accessToken,
-          body: JSON.stringify({
-            latitude: fuzzed.latitude,
-            longitude: fuzzed.longitude,
-            ...(coords.accuracyM != null
-              ? { accuracyM: coords.accuracyM }
-              : {}),
-          }),
-        });
-
-        const data = await apiFetch<NearbyResponse>(
-          '/geo/nearby?radiusKm=50&limit=50',
-          { token: accessToken },
-        );
-        setItems(data.results ?? []);
-
-        const notes: string[] = [];
-        if (permissionDenied) {
-          notes.push(
-            'Location permission off — using demo area so you can still test Nearby.',
-          );
-        } else if (source === 'demo') {
-          notes.push('GPS unavailable — using demo area.');
-        }
-        if (data.mode === 'memory') {
-          notes.push(
-            data.note ??
-              'Demo geo (in-memory). Samples reset if the API restarts.',
-          );
-        }
-        setModeNote(notes.length ? notes.join(' ') : null);
-      } catch (err) {
-        const message =
-          err instanceof Error ? err.message : 'Could not load nearby profiles';
-        setError(message);
-        setItems([]);
-        setModeNote(null);
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [accessToken],
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      loadNearby();
-    }, [loadNearby]),
-  );
-
-  if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={colors.coral} />
-        <Text style={styles.sub}>Finding people near you…</Text>
-      </View>
-    );
-  }
-
+  const [error, setError] = useState(null);
+  const load = useCallback(async () => {
+    if (!accessToken) { setError("Sign in to see people nearby."); setLoading(false); return; }
+    setLoading(true); setError(null);
+    try {
+      const fuzzed = fuzzLatLng(DEMO_COORDS.latitude, DEMO_COORDS.longitude);
+      await apiFetch("/geo/location", { method: "POST", token: accessToken, body: JSON.stringify({ latitude: fuzzed.latitude, longitude: fuzzed.longitude }) });
+      const data = await apiFetch("/geo/nearby?radiusKm=50&limit=50", { token: accessToken });
+      setItems(data.results || []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load nearby");
+      setItems([]);
+    } finally { setLoading(false); }
+  }, [accessToken]);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+  if (loading) return (<View style={styles.centered}><ActivityIndicator color={colors.coral} /><Text style={styles.sub}>Finding people...</Text></View>);
   return (
     <View style={styles.container}>
-      <Text style={styles.sub}>
-        People near you · distances are approximate
-      </Text>
-      {modeNote ? <Text style={styles.note}>{modeNote}</Text> : null}
-      {error ? (
-        <View style={styles.stateBox}>
-          <Text style={styles.error}>{error}</Text>
-          <Pressable style={styles.retry} onPress={() => loadNearby()}>
-            <Text style={styles.retryText}>Try again</Text>
-          </Pressable>
-        </View>
-      ) : null}
-
-      {!error && items.length === 0 ? (
-        <View style={styles.stateBox}>
-          <Text style={styles.emptyTitle}>Nobody nearby yet</Text>
-          <Text style={styles.emptyBody}>
-            You are the only visible person in this area right now. Pull to
-            refresh after friends join — or run the SAMPLE seed script so test
-            profiles appear.
-          </Text>
-          <Pressable style={styles.retry} onPress={() => loadNearby(true)}>
-            <Text style={styles.retryText}>Refresh</Text>
-          </Pressable>
-        </View>
-      ) : null}
-
-      <FlatList
-        data={items}
-        keyExtractor={(item) => item.userId}
-        numColumns={2}
-        columnWrapperStyle={styles.row}
-        contentContainerStyle={styles.list}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => loadNearby(true)}
-            tintColor={colors.coral}
-          />
-        }
+      <Text style={styles.sub}>Stage 1 demo area (GPS parked).</Text>
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+      <FlatList data={items} keyExtractor={(item) => item.userId} numColumns={2} columnWrapperStyle={{ gap: spacing.md }} contentContainerStyle={{ padding: spacing.md }}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={load} tintColor={colors.coral} />}
         renderItem={({ item }) => (
-          <Pressable
-            style={styles.card}
-            onPress={() => router.push(`/user/${item.userId}`)}
-            accessibilityRole="button"
-            accessibilityLabel={`Open ${item.displayName} profile`}
-          >
-            <NearbyPhotoTile
-              displayName={item.displayName}
-              photoUrls={item.photoUrls}
-              online={item.online}
-            />
-            <Text style={styles.name}>
-              {item.displayName}, {item.age}
-            </Text>
+          <Pressable style={styles.card} onPress={() => router.push("/user/" + item.userId)}>
+            <View style={styles.photo}><Text style={styles.initial}>{(item.displayName?.[0] || "?").toUpperCase()}</Text></View>
+            <Text style={styles.name}>{item.displayName}, {item.age}</Text>
             <Text style={styles.meta}>{item.distanceLabel}</Text>
-            {item.lookingFor?.length ? (
-              <Text style={styles.meta} numberOfLines={1}>
-                {item.lookingFor.join(' · ')}
-              </Text>
-            ) : null}
           </Pressable>
-        )}
-      />
+        )} />
     </View>
   );
 }
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.ink,
-  },
-  centered: {
-    flex: 1,
-    backgroundColor: colors.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.md,
-  },
-  sub: {
-    fontFamily: typography.body,
-    color: colors.mistMuted,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
-    fontSize: 13,
-  },
-  note: {
-    fontFamily: typography.body,
-    color: colors.teal,
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.sm,
-    fontSize: 12,
-  },
-  stateBox: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    gap: spacing.sm,
-  },
-  error: {
-    fontFamily: typography.body,
-    color: colors.danger,
-    fontSize: 14,
-  },
-  emptyTitle: {
-    fontFamily: typography.heading,
-    color: colors.mist,
-    fontSize: 18,
-  },
-  emptyBody: {
-    fontFamily: typography.body,
-    color: colors.mistMuted,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  retry: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.inkElevated,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  retryText: {
-    fontFamily: typography.bodyMedium,
-    color: colors.coral,
-    fontSize: 14,
-  },
-  list: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xl,
-  },
-  row: {
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  card: {
-    flex: 1,
-    gap: spacing.xs,
-  },
-  photo: {
-    aspectRatio: 3 / 4,
-    borderRadius: radii.lg,
-    backgroundColor: colors.inkElevated,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  photoImage: {
-    ...StyleSheet.absoluteFillObject,
-    width: '100%',
-    height: '100%',
-  },
-  initial: {
-    fontFamily: typography.brand,
-    fontSize: 42,
-    color: colors.coral,
-  },
-  onlineDot: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.online,
-  },
-  name: {
-    fontFamily: typography.heading,
-    color: colors.mist,
-    fontSize: 15,
-  },
-  meta: {
-    fontFamily: typography.body,
-    color: colors.mistMuted,
-    fontSize: 12,
-  },
+  container: { flex: 1, backgroundColor: colors.ink },
+  centered: { flex: 1, backgroundColor: colors.ink, alignItems: "center", justifyContent: "center", gap: spacing.md },
+  sub: { color: colors.mistMuted, padding: spacing.md, fontSize: 13, fontFamily: typography.body },
+  error: { color: colors.danger, paddingHorizontal: spacing.md, fontFamily: typography.body },
+  card: { flex: 1, gap: spacing.xs, marginBottom: spacing.md },
+  photo: { aspectRatio: 3/4, borderRadius: radii.lg, backgroundColor: colors.inkElevated, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
+  initial: { color: colors.coral, fontSize: 42, fontFamily: typography.brand },
+  name: { color: colors.mist, fontSize: 15, fontFamily: typography.heading },
+  meta: { color: colors.mistMuted, fontSize: 12, fontFamily: typography.body },
 });

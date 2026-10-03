@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "app.findr.mobile",
-      "versionCode": 7,
+      "versionCode": 8,
       "adaptiveIcon": {
         "backgroundColor": "#12151C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -37,7 +37,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#12151C"
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true

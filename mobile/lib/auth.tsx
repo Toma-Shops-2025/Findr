@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { InteractionManager } from 'react-native';
 
 import {
   clearSession,
@@ -17,16 +18,34 @@ import {
 } from '@/lib/session';
 
 /**
- * AuthProvider must not pull heavy native modules (expo-file-system via api.ts)
- * at module eval time. apiFetch is required lazily inside signup/login/logout
- * and the optional /auth/me refresh after SecureStore restore.
+ * SAFE MODE auth:
+ * - Never import @/lib/api at module top-level (expo-file-system is heavy).
+ * - Restore SecureStore session only, mark ready, let first paint happen.
+ * - Defer /auth/me until after interactions / first paint.
+ * - Never throw out of boot; timeouts cannot block the tree.
  */
 async function apiFetchLazy<T>(
   path: string,
   options: RequestInit & { token?: string | null } = {},
 ): Promise<T> {
-  const { apiFetch } = await import('@/lib/api');
-  return apiFetch<T>(path, options);
+  try {
+    const { apiFetch } = await import('@/lib/api');
+    return apiFetch<T>(path, options);
+  } catch (err) {
+    const wrapped = err instanceof Error ? err : new Error(String(err));
+    throw wrapped;
+  }
+}
+
+function waitForFirstPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    // After interactions + one macrotask so BootFallback / Redirect can paint.
+    const handle = InteractionManager.runAfterInteractions(() => {
+      setTimeout(resolve, 0);
+    });
+    // InteractionManager handle may be a cancellable object; ignore cancel path.
+    void handle;
+  });
 }
 
 type SignupInput = {
@@ -53,8 +72,8 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-/** Cap session restore so hung SecureStore /auth/me cannot block first paint. */
-const AUTH_BOOT_TIMEOUT_MS = 3000;
+/** Cap SecureStore restore so hung native storage cannot block first paint. */
+const AUTH_BOOT_TIMEOUT_MS = 2500;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
@@ -78,30 +97,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, AUTH_BOOT_TIMEOUT_MS);
 
     (async () => {
+      let stored: AuthSession | null = null;
       try {
-        const stored = await loadSession();
-        if (cancelled) return;
-        if (!stored) {
-          finish();
-          return;
-        }
-        try {
-          const me = await apiFetchLazy<{ user: AuthUser }>('/auth/me', {
-            token: stored.accessToken,
-          });
-          const next = { accessToken: stored.accessToken, user: me.user };
-          await saveSession(next);
-          if (!cancelled) setSession(next);
-        } catch {
-          await clearSession();
-          if (!cancelled) setSession(null);
-        }
+        stored = await loadSession();
+        if (!cancelled && stored) setSession(stored);
       } catch (err) {
         console.warn('Findr auth boot failed; continuing logged out', err);
         if (!cancelled) setSession(null);
       } finally {
+        // First paint: ready after SecureStore only - before any network.
         clearTimeout(timer);
         finish();
+      }
+
+      if (cancelled || !stored) return;
+
+      try {
+        await waitForFirstPaint();
+      } catch {
+        // ignore
+      }
+      if (cancelled) return;
+
+      try {
+        const me = await apiFetchLazy<{ user: AuthUser }>('/auth/me', {
+          token: stored.accessToken,
+        });
+        const next = { accessToken: stored.accessToken, user: me.user };
+        await saveSession(next);
+        if (!cancelled) setSession(next);
+      } catch {
+        try {
+          await clearSession();
+        } catch {
+          // ignore
+        }
+        if (!cancelled) setSession(null);
       }
     })();
 

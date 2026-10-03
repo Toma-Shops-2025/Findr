@@ -18,12 +18,12 @@ export type AuthSession = {
 };
 
 /**
- * Session storage that prefers expo-secure-store on native Android/iOS when the
- * native module is healthy, and falls back to localStorage (web) or in-memory
- * when SecureStore is missing, mismatched, or throws.
- *
- * Never throws from get/set/delete — and never `import` SecureStore at module
- * top-level (a hard require/eval of a broken native bridge must not kill boot).
+ * SAFE MODE session storage:
+ * - Prefers expo-secure-store on native when healthy; falls back to
+ *   localStorage (web) or in-memory when SecureStore is missing/mismatched.
+ * - Never throws from get/set/delete / load/save/clear.
+ * - Never static-import SecureStore at module top-level (broken native bridge
+ *   must not kill cold start).
  */
 
 /** Process-local fallback when neither SecureStore nor localStorage works. */
@@ -44,7 +44,7 @@ type SecureStoreModule = {
 
 let secureStoreModule: SecureStoreModule | null | undefined;
 
-/** Lazy require — never throws out of this helper. */
+/** Lazy require - never throws out of this helper. */
 function getSecureStore(): SecureStoreModule | null {
   if (secureStoreDisabled) return null;
   if (secureStoreModule !== undefined) return secureStoreModule;

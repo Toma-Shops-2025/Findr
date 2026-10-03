@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "app.findr.mobile",
-      "versionCode": 4,
+      "versionCode": 5,
       "adaptiveIcon": {
         "backgroundColor": "#12151C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -71,6 +71,7 @@
         "projectId": "fca40da4-74a0-4eba-83e2-ef6155353a86"
       },
       "apiUrl": "https://api.myfindr.fun"
-    }
+    },
+    "newArchEnabled": false
   }
 }

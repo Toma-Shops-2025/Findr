@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "app.findr.mobile",
-      "versionCode": 6,
+      "versionCode": 7,
       "adaptiveIcon": {
         "backgroundColor": "#12151C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -37,31 +37,7 @@
           "resizeMode": "contain",
           "backgroundColor": "#12151C"
         }
-      ],
-      "expo-secure-store",
-      "./plugins/withDevCleartextTraffic.js",
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "Findr lets you pick a photo or short video to send. Media is uploaded to Findr only and is not saved to your phone gallery."
-        }
-      ],
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Findr uses an in-app camera. Photos and short videos stay inside Findr -- not your phone gallery.",
-          "microphonePermission": "Findr uses the mic for short videos (max 30 seconds) that stay inside Findr.",
-          "recordAudioAndroid": true
-        }
-      ],
-      "expo-av",
-      [
-        "expo-location",
-        {
-          "locationWhenInUsePermission": "Findr uses your location to share an approximate pin in chat and for Nearby. Location is not saved to your phone gallery."
-        }
-      ],
-      "expo-font"
+      ]
     ],
     "experiments": {
       "typedRoutes": true

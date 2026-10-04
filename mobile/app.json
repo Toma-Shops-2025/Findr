@@ -11,15 +11,18 @@
       "supportsTablet": true,
       "bundleIdentifier": "app.findr.mobile",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Findr uses your approximate location to show people nearby. Exact GPS is never shown on your profile."
+        "NSLocationWhenInUseUsageDescription": "Findr uses your approximate location to show people nearby. Exact GPS is never shown on your profile.",
+        "NSPhotoLibraryUsageDescription": "Findr uses your photo library so you can set a profile picture. Photos upload to Findr only and are not saved back to your gallery."
       }
     },
     "android": {
       "package": "app.findr.mobile",
-      "versionCode": 14,
+      "versionCode": 15,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "READ_MEDIA_IMAGES",
+        "READ_EXTERNAL_STORAGE"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#12151C",
@@ -52,6 +55,12 @@
           "locationWhenInUsePermission": "Findr uses your approximate location to show people nearby. Exact GPS is never shown on your profile.",
           "isAndroidBackgroundLocationEnabled": false,
           "isIosBackgroundLocationEnabled": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Findr uses your photo library so you can set a profile picture. Photos upload to Findr only and are not saved back to your gallery."
         }
       ]
     ],

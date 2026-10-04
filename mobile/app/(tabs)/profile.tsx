@@ -12,9 +12,10 @@ import {
 } from 'react-native';
 import { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 
 import { colors, radii, spacing, typography } from '@/constants/theme';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, apiUploadImage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { primaryPhotoUrl } from '@/lib/mediaUrl';
 import { LOOKING_FOR_OPTIONS, type LookingFor, type PublicProfile } from '@/lib/types';
@@ -23,6 +24,7 @@ export default function ProfileScreen() {
   const { accessToken } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [visibilitySaving, setVisibilitySaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState('');
@@ -96,11 +98,47 @@ export default function ProfileScreen() {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
-  const onPhotosStage2 = () =>
-    Alert.alert(
-      'Photos return in Stage 2',
-      'Profile photo upload is parked for Stage 1 Metro.',
-    );
+
+  const onPickPhoto = async () => {
+    if (!accessToken || uploading) return;
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert(
+        'Photo access needed',
+        'Allow Findr to access your photos to set a profile picture.',
+      );
+      return;
+    }
+    const picked = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.85,
+      allowsEditing: true,
+      aspect: [3, 4],
+    });
+    if (picked.canceled || !picked.assets?.[0]?.uri) return;
+
+    setUploading(true);
+    setError(null);
+    try {
+      const asset = picked.assets[0];
+      const uploaded = await apiUploadImage(asset.uri, {
+        token: accessToken,
+        kind: 'profile',
+        fileName: asset.fileName ?? 'profile.jpg',
+      });
+      setPhotoUrls((prev) =>
+        [uploaded.url, ...prev.filter((u) => u !== uploaded.url)].slice(0, 6),
+      );
+      // Refresh from server (upload also updates profile photoUrls).
+      await load();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Upload failed';
+      setError(message);
+      Alert.alert('Could not upload', message);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const onToggleVisibility = (next: boolean) => {
     if (!accessToken || visibilitySaving) return;
@@ -193,15 +231,26 @@ export default function ProfileScreen() {
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
-      <Pressable style={styles.photo} onPress={onPhotosStage2}>
+      <Pressable
+        style={styles.photo}
+        onPress={onPickPhoto}
+        disabled={uploading}
+      >
         {photoUri ? (
           <Image source={{ uri: photoUri }} style={styles.photoImage} />
         ) : (
           <Text style={styles.initial}>{initial}</Text>
         )}
+        {uploading ? (
+          <View style={styles.photoOverlay}>
+            <ActivityIndicator color={colors.mist} />
+          </View>
+        ) : null}
       </Pressable>
-      <Pressable onPress={onPhotosStage2}>
-        <Text style={styles.photoLink}>Photos return in Stage 2</Text>
+      <Pressable onPress={onPickPhoto} disabled={uploading}>
+        <Text style={styles.photoLink}>
+          {uploading ? 'Uploading...' : photoUri ? 'Change photo' : 'Add photo'}
+        </Text>
       </Pressable>
       <Text style={styles.name}>{displayName.trim() || 'Your profile'}</Text>
       <Text style={styles.meta}>
@@ -332,6 +381,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   photoImage: { width: '100%', height: '100%' },
+  photoOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   photoLink: {
     fontFamily: typography.bodyMedium,
     color: colors.coral,

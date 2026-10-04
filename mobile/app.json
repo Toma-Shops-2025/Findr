@@ -9,11 +9,18 @@
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.findr.mobile"
+      "bundleIdentifier": "app.findr.mobile",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Findr uses your approximate location to show people nearby. Exact GPS is never shown on your profile."
+      }
     },
     "android": {
       "package": "app.findr.mobile",
-      "versionCode": 13,
+      "versionCode": 14,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#12151C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -38,7 +45,15 @@
           "backgroundColor": "#12151C"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Findr uses your approximate location to show people nearby. Exact GPS is never shown on your profile.",
+          "isAndroidBackgroundLocationEnabled": false,
+          "isIosBackgroundLocationEnabled": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

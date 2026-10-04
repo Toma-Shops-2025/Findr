@@ -1,4 +1,7 @@
-Findr public site (landing + Privacy + Terms)
+Findr public site (landing + Privacy + Terms + Delete account)
 Deploy as Render Static Site with Root Directory = web (Publish Directory = .)
-Play URLs: https://myfindr.fun/privacy/  and  https://myfindr.fun/terms/
-Edit contact: replace EDIT_ME_CONTACT@example.com in the HTML files (or run findr-set-web-contact.ps1)
+Play URLs:
+  https://myfindr.fun/privacy/
+  https://myfindr.fun/terms/
+  https://myfindr.fun/delete-account/
+Contact email: contactus@myfindr.fun

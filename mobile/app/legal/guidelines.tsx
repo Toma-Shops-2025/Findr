@@ -4,7 +4,7 @@ export default function GuidelinesScreen() {
   return (
     <LegalDocScreen
       title="Community Guidelines"
-      updated="2026-09-21"
+      updated="2026-10-04"
       intro="Findr should feel inclusive and adult. These guidelines summarize what is okay and what gets you removed. They work together with the Terms of Service."
       sections={[
         {
@@ -35,7 +35,7 @@ export default function GuidelinesScreen() {
         {
           heading: 'Enforcement',
           body:
-            'We may warn, hide content, suspend, or ban. Serious safety issues (underage, threats, NCI) may be removed without warning. Appeals process should be added before broad launch.',
+            'We may warn, hide content, suspend, or ban. Serious safety issues (underage, threats, NCI) may be removed without warning. Appeals: contactus@myfindr.fun',
         },
       ]}
     />

@@ -9,11 +9,13 @@ import {
   toPublic,
   verifyPassword,
 } from '../modules/auth/userStore.js';
+import { getLocationStore } from '../modules/geo/locationStore.js';
+import { getProfileStore } from '../modules/profiles/profileStore.js';
 
 const signupSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
-  /** Optional — when omitted, acceptedAgeGate must be true (MVP). */
+  /** Optional â€” when omitted, acceptedAgeGate must be true (MVP). */
   dateOfBirth: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -109,7 +111,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post('/logout', async (_req, reply) => {
-    // Stateless JWT — client clears SecureStore. Endpoint kept for symmetry / future revoke list.
+    // Stateless JWT â€” client clears SecureStore. Endpoint kept for symmetry / future revoke list.
     return reply.send({ ok: true });
   });
 
@@ -117,6 +119,36 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const auth = await requireAuth(req, reply);
     if (!auth) return;
     return { user: auth.user };
+  });
+
+  /**
+   * Soft-delete the signed-in account (Play Store account deletion).
+   * Scrubs profile + removes coarse location; JWT remains until client clears it.
+   */
+  app.delete('/me', async (req, reply) => {
+    const auth = await requireAuth(req, reply);
+    if (!auth) return;
+
+    const users = await getUserStore();
+    const profiles = await getProfileStore();
+    const { store: locations } = await getLocationStore();
+
+    try {
+      await profiles.scrubDeleted(auth.userId);
+    } catch (err) {
+      req.log.warn({ err, userId: auth.userId }, 'profile scrub on delete failed');
+    }
+    try {
+      await locations.remove(auth.userId);
+    } catch (err) {
+      req.log.warn({ err, userId: auth.userId }, 'location remove on delete failed');
+    }
+
+    const ok = await users.softDelete(auth.userId);
+    if (!ok) {
+      return reply.code(404).send({ error: 'not_found' });
+    }
+    return { ok: true, deleted: true };
   });
 
   app.post('/age-gate', async (req, reply) => {

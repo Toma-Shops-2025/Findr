@@ -4,7 +4,7 @@ export default function TermsScreen() {
   return (
     <LegalDocScreen
       title="Terms of Service"
-      updated="2026-09-21"
+      updated="2026-10-04"
       intro="Welcome to Findr. By creating an account or using the app, you agree to these Terms. If you do not agree, do not use Findr."
       sections={[
         {
@@ -40,7 +40,7 @@ export default function TermsScreen() {
         {
           heading: '7. Termination',
           body:
-            'You may stop using Findr anytime. We may suspend or delete accounts that violate these Terms, create safety risk, or for operational reasons. Account deletion tools will expand as the product matures.',
+            'You may stop using Findr anytime. Delete your account in Safety, or request deletion at https://myfindr.fun/delete-account/ or by emailing contactus@myfindr.fun. We may suspend or delete accounts that violate these Terms, create safety risk, or for operational reasons.',
         },
         {
           heading: '8. Disclaimers & liability',
@@ -54,8 +54,7 @@ export default function TermsScreen() {
         },
         {
           heading: '10. Contact',
-          body:
-            'Questions about these Terms: replace with your support email before launch (e.g. legal@yourdomain).',
+          body: 'Questions about these Terms: contactus@myfindr.fun',
         },
       ]}
     />

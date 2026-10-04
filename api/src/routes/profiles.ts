@@ -17,31 +17,45 @@ const lookingForEnum = z.enum([
   'networking',
 ]);
 
-const updateSchema = z.object({
-  displayName: z.string().trim().min(1).max(40),
-  bio: z.string().max(500).optional(),
-  genderIdentity: z.string().max(80).optional(),
-  orientationsShown: z.array(z.string().max(60)).max(12).optional(),
-  orientationsSeeking: z.array(z.string().max(60)).max(12).optional(),
-  lookingFor: z.array(lookingForEnum).max(8).optional(),
-  // http(s), local /uploads/…, or stub:photo-N placeholders.
-  photoUrls: z
-    .array(z.string().max(500))
-    .max(6)
-    .optional()
-    .refine((urls) => !urls || urls.every((u) => isAllowedUploadUrl(u)), {
-      message: 'photoUrls must be http(s), /uploads/…, or stub:…',
-    }),
-  /** Profile age (not DOB). When set, must be 18+. */
-  age: z
-    .number()
-    .int()
-    .min(18, { message: 'age must be 18 or older' })
-    .max(120)
-    .nullable()
-    .optional(),
-  isVisible: z.boolean().optional(),
-});
+const updateSchema = z
+  .object({
+    displayName: z.string().trim().min(1).max(40).optional(),
+    bio: z.string().max(500).optional(),
+    genderIdentity: z.string().max(80).optional(),
+    orientationsShown: z.array(z.string().max(60)).max(12).optional(),
+    orientationsSeeking: z.array(z.string().max(60)).max(12).optional(),
+    lookingFor: z.array(lookingForEnum).max(8).optional(),
+    // http(s), local /uploads/..., or stub:photo-N placeholders.
+    photoUrls: z
+      .array(z.string().max(500))
+      .max(6)
+      .optional()
+      .refine((urls) => !urls || urls.every((u) => isAllowedUploadUrl(u)), {
+        message: 'photoUrls must be http(s), /uploads/..., or stub:...',
+      }),
+    /** Profile age (not DOB). When set, must be 18+. */
+    age: z
+      .number()
+      .int()
+      .min(18, { message: 'age must be 18 or older' })
+      .max(120)
+      .nullable()
+      .optional(),
+    isVisible: z.boolean().optional(),
+  })
+  .refine(
+    (body) =>
+      body.displayName !== undefined ||
+      body.bio !== undefined ||
+      body.genderIdentity !== undefined ||
+      body.orientationsShown !== undefined ||
+      body.orientationsSeeking !== undefined ||
+      body.lookingFor !== undefined ||
+      body.photoUrls !== undefined ||
+      body.age !== undefined ||
+      body.isVisible !== undefined,
+    { message: 'at least one profile field is required' },
+  );
 
 function resolveAge(
   record: ProfileRecord | null,
@@ -125,8 +139,20 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const store = await getProfileStore();
+    const existing = await store.get(auth.userId);
+    // Full profile save still needs a display name (create or rename).
+    if (
+      parsed.data.displayName === undefined &&
+      !existing?.displayName?.trim() &&
+      parsed.data.isVisible === undefined
+    ) {
+      return reply.code(400).send({
+        error: 'display_name_required',
+        message: 'Add a display name before saving your profile.',
+      });
+    }
     const update: {
-      displayName: string;
+      displayName?: string;
       bio?: string;
       genderIdentity?: string;
       orientationsShown?: string[];
@@ -135,7 +161,10 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
       photoUrls?: string[];
       age?: number | null;
       isVisible?: boolean;
-    } = { displayName: parsed.data.displayName };
+    } = {};
+    if (parsed.data.displayName !== undefined) {
+      update.displayName = parsed.data.displayName;
+    }
     if (parsed.data.bio !== undefined) update.bio = parsed.data.bio;
     if (parsed.data.genderIdentity !== undefined) {
       update.genderIdentity = parsed.data.genderIdentity;

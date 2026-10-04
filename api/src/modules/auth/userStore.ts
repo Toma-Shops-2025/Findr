@@ -122,9 +122,18 @@ class MemoryUserStore {
     return this.usersById.get(id) ?? null;
   }
 
-  /** Demo / nearby helpers — memory only. */
+  /** Demo / nearby helpers â€” memory only. */
   async listIds(): Promise<string[]> {
     return [...this.usersById.keys()];
+  }
+
+  /** Soft-delete: remove from memory so login /me / nearby fail closed. */
+  async softDelete(userId: string): Promise<boolean> {
+    const user = this.usersById.get(userId);
+    if (!user) return false;
+    this.usersById.delete(userId);
+    this.usersByEmail.delete(normalizeEmail(user.email));
+    return true;
   }
 }
 
@@ -168,7 +177,7 @@ class PostgresUserStore {
       if (code === '23514') {
         throw Object.assign(new Error('underage'), { code: 'underage' });
       }
-      // Column age_gate_accepted_at missing — retry without it (pre-migration).
+      // Column age_gate_accepted_at missing â€” retry without it (pre-migration).
       if (code === '42703') {
         const result = await this.pool.query(
           `INSERT INTO users (
@@ -220,6 +229,27 @@ class PostgresUserStore {
     );
     const row = result.rows[0];
     return row ? rowToUser(row) : null;
+  }
+
+  /**
+   * Soft-delete + anonymize so the email can be reused and JWT /me fails.
+   * Related profile/location cleanup is handled by the auth delete route.
+   */
+  async softDelete(userId: string): Promise<boolean> {
+    const tombstoneEmail = `deleted+${userId}@deleted.invalid`;
+    const tombstoneSubject = `deleted:${userId}`;
+    const passwordHash = await bcrypt.hash(crypto.randomUUID(), 10);
+    const result = await this.pool.query(
+      `UPDATE users
+       SET deleted_at = COALESCE(deleted_at, now()),
+           email = $2,
+           auth_subject = $3,
+           password_hash = $4,
+           updated_at = now()
+       WHERE id = $1 AND deleted_at IS NULL`,
+      [userId, tombstoneEmail, tombstoneSubject, passwordHash],
+    );
+    return (result.rowCount ?? 0) > 0;
   }
 }
 

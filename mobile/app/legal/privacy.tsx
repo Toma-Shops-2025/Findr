@@ -4,13 +4,13 @@ export default function PrivacyScreen() {
   return (
     <LegalDocScreen
       title="Privacy Policy"
-      updated="2026-09-21"
+      updated="2026-10-04"
       intro="This Privacy Policy explains what Findr collects, why, and your choices. It is an MVP template - customize with counsel before public launch."
       sections={[
         {
           heading: '1. Who we are',
           body:
-            'Findr is operated by Toma Adkins / TomasEmpire (update legal entity name before launch). Contact: replace with privacy@yourdomain.',
+            'Findr is operated by Toma Adkins / TomasEmpire. Contact: contactus@myfindr.fun',
         },
         {
           heading: '2. Data we collect',
@@ -25,7 +25,7 @@ export default function PrivacyScreen() {
         {
           heading: '4. Location',
           body:
-            'Nearby features need location permission. We aim to store and show coarse / fuzzed distance bands rather than exact pins to other users. You can limit visibility in settings when that control is enabled.',
+            'Nearby features need location permission. We aim to store and show coarse / fuzzed distance bands rather than exact pins to other users. You can turn off Visibility in Profile or Safety so you do not appear in Nearby.',
         },
         {
           heading: '5. Sharing',
@@ -45,7 +45,7 @@ export default function PrivacyScreen() {
         {
           heading: '8. Your choices',
           body:
-            'Update profile fields in-app. Log out anytime. Request deletion via in-app Delete account (stub during early MVP) or email support. Limit location OS permissions (Nearby will degrade).',
+            'Update profile fields in-app. Log out anytime. Delete your account in Safety (Delete account) or request deletion by emailing contactus@myfindr.fun. Public instructions: https://myfindr.fun/delete-account/. Limit location OS permissions (Nearby will degrade).',
         },
         {
           heading: '9. Children',
@@ -61,6 +61,10 @@ export default function PrivacyScreen() {
           heading: '11. Changes',
           body:
             'We may update this Policy. We will post the new date above and, for material changes, try to notify in-app or by email when feasible.',
+        },
+        {
+          heading: '12. Contact',
+          body: 'Privacy requests: contactus@myfindr.fun',
         },
       ]}
     />

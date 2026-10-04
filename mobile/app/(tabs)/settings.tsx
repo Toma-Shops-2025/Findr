@@ -2,10 +2,12 @@ import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native';
@@ -16,10 +18,13 @@ import { colors, radii, spacing, typography } from '@/constants/theme';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { unblockUser } from '@/lib/safety';
-import type { BlockedUser } from '@/lib/types';
+import type { BlockedUser, PublicProfile } from '@/lib/types';
+
+const SUPPORT_EMAIL = 'contactus@myfindr.fun';
+const DELETE_ACCOUNT_URL = 'https://myfindr.fun/delete-account/';
 
 /**
- * Settings + blocked list / unblock + logout.
+ * Settings + blocked list / unblock + visibility + delete + logout.
  * Tab title: Safety. Must scroll above the bottom tab bar.
  * Stage 1: ASCII-only user strings (no em dash / middle dot).
  */
@@ -31,6 +36,28 @@ export default function SettingsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [blocksError, setBlocksError] = useState<string | null>(null);
   const [unblockingId, setUnblockingId] = useState<string | null>(null);
+  const [isVisible, setIsVisible] = useState(true);
+  const [visibilityLoading, setVisibilityLoading] = useState(true);
+  const [visibilitySaving, setVisibilitySaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const loadVisibility = useCallback(async () => {
+    if (!accessToken) {
+      setVisibilityLoading(false);
+      return;
+    }
+    setVisibilityLoading(true);
+    try {
+      const data = await apiFetch<{ profile: PublicProfile }>('/profiles/me', {
+        token: accessToken,
+      });
+      setIsVisible(data.profile?.isVisible !== false);
+    } catch {
+      // Keep last known toggle if profile fetch fails.
+    } finally {
+      setVisibilityLoading(false);
+    }
+  }, [accessToken]);
 
   const loadBlocks = useCallback(
     async (isRefresh = false) => {
@@ -63,8 +90,34 @@ export default function SettingsScreen() {
   useFocusEffect(
     useCallback(() => {
       loadBlocks();
-    }, [loadBlocks]),
+      loadVisibility();
+    }, [loadBlocks, loadVisibility]),
   );
+
+  const onToggleVisibility = (next: boolean) => {
+    if (!accessToken || visibilitySaving) return;
+    const prev = isVisible;
+    setIsVisible(next);
+    setVisibilitySaving(true);
+    void (async () => {
+      try {
+        const data = await apiFetch<{ profile: PublicProfile }>('/profiles/me', {
+          method: 'PUT',
+          token: accessToken,
+          body: JSON.stringify({ isVisible: next }),
+        });
+        setIsVisible(data.profile?.isVisible !== false);
+      } catch (err) {
+        setIsVisible(prev);
+        Alert.alert(
+          'Could not update visibility',
+          err instanceof Error ? err.message : 'Try again',
+        );
+      } finally {
+        setVisibilitySaving(false);
+      }
+    })();
+  };
 
   const onUnblock = (item: BlockedUser) => {
     if (!accessToken) return;
@@ -96,6 +149,42 @@ export default function SettingsScreen() {
     );
   };
 
+  const runDeleteAccount = async () => {
+    if (!accessToken || deleting) return;
+    setDeleting(true);
+    try {
+      await apiFetch('/auth/me', { method: 'DELETE', token: accessToken });
+      await logout();
+      router.replace('/(auth)/login');
+      Alert.alert('Account deleted', 'Your Findr account has been deleted.');
+    } catch (err) {
+      Alert.alert(
+        'Could not delete account',
+        (err instanceof Error ? err.message : 'Try again') +
+          `. Or email ${SUPPORT_EMAIL}`,
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const onDeleteAccount = () => {
+    Alert.alert(
+      'Delete account?',
+      'This permanently deletes your Findr account and hides your profile. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void runDeleteAccount();
+          },
+        },
+      ],
+    );
+  };
+
   const onLogout = async () => {
     await logout();
     router.replace('/(auth)/login');
@@ -113,7 +202,10 @@ export default function SettingsScreen() {
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
-          onRefresh={() => loadBlocks(true)}
+          onRefresh={() => {
+            loadBlocks(true);
+            loadVisibility();
+          }}
           tintColor={colors.coral}
         />
       }
@@ -188,26 +280,48 @@ export default function SettingsScreen() {
         <Text style={styles.rowTitle}>Community Guidelines</Text>
         <Text style={styles.rowMeta}>How to behave on Findr</Text>
       </Pressable>
+      <Pressable
+        style={styles.row}
+        onPress={() => {
+          void Linking.openURL(`mailto:${SUPPORT_EMAIL}`);
+        }}
+      >
+        <Text style={styles.rowTitle}>Contact support</Text>
+        <Text style={styles.rowMeta}>{SUPPORT_EMAIL}</Text>
+      </Pressable>
 
       <Text style={styles.section}>Account</Text>
+      <View style={styles.visibilityRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.rowTitle}>Visibility</Text>
+          <Text style={styles.rowMeta}>
+            Show me in Nearby |{' '}
+            {visibilityLoading ? '...' : isVisible ? 'On' : 'Off'}
+          </Text>
+        </View>
+        {visibilityLoading ? (
+          <ActivityIndicator color={colors.coral} />
+        ) : (
+          <Switch
+            value={isVisible}
+            onValueChange={onToggleVisibility}
+            disabled={visibilitySaving}
+            trackColor={{ false: colors.border, true: colors.teal }}
+            thumbColor={colors.mist}
+          />
+        )}
+      </View>
       <Pressable
         style={styles.row}
-        onPress={() => Alert.alert('Visibility', 'Toggle stub')}
+        onPress={onDeleteAccount}
+        disabled={deleting}
       >
-        <Text style={styles.rowTitle}>Visibility</Text>
-        <Text style={styles.rowMeta}>Show me in Nearby | On</Text>
-      </Pressable>
-      <Pressable
-        style={styles.row}
-        onPress={() =>
-          Alert.alert(
-            'Delete account',
-            'In-app deletion required by stores - stub.',
-          )
-        }
-      >
-        <Text style={[styles.rowTitle, styles.danger]}>Delete account</Text>
-        <Text style={styles.rowMeta}>Stub | irreversible</Text>
+        <Text style={[styles.rowTitle, styles.danger]}>
+          {deleting ? 'Deleting...' : 'Delete account'}
+        </Text>
+        <Text style={styles.rowMeta}>
+          Permanent | or {DELETE_ACCOUNT_URL.replace('https://', '')}
+        </Text>
       </Pressable>
       <Pressable style={[styles.row, styles.logout]} onPress={onLogout}>
         <Text style={styles.rowTitle}>Log out</Text>
@@ -313,6 +427,16 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.md,
     gap: 4,
+  },
+  visibilityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.inkElevated,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.md,
   },
   logout: {
     marginTop: spacing.md,

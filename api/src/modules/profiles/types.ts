@@ -1,4 +1,4 @@
-/** Profile field shapes — inclusive enums as extensible lists. */
+/** Profile field shapes â€” inclusive enums as extensible lists. */
 export type LookingFor =
   | 'dates'
   | 'friends'
@@ -32,13 +32,14 @@ export type ProfileRecord = {
 };
 
 export type ProfileUpdateInput = {
-  displayName: string;
+  /** Optional for partial updates (e.g. visibility-only from Safety). */
+  displayName?: string;
   bio?: string;
   genderIdentity?: string;
   orientationsShown?: string[];
   orientationsSeeking?: string[];
   lookingFor?: LookingFor[];
-  /** Absolute http(s), /uploads/… paths, or stub: placeholders. */
+  /** Absolute http(s), /uploads/â€¦ paths, or stub: placeholders. */
   photoUrls?: string[];
   /** When set, must be >= 18 (server-validated). */
   age?: number | null;

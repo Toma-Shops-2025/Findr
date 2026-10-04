@@ -72,9 +72,13 @@ class MemoryProfileStore {
     const stamp = nowIso();
     const nextAge =
       input.age !== undefined ? input.age : (existing?.age ?? null);
+    const displayName =
+      input.displayName !== undefined
+        ? input.displayName.trim()
+        : (existing?.displayName ?? '');
     const next: ProfileRecord = {
       userId,
-      displayName: input.displayName.trim(),
+      displayName,
       bio: (input.bio ?? existing?.bio ?? '').trim(),
       genderIdentity: (input.genderIdentity ?? existing?.genderIdentity ?? '').trim(),
       orientationsShown:
@@ -104,6 +108,26 @@ class MemoryProfileStore {
     if (!existing) return;
     existing.lastActiveAt = nowIso();
     existing.updatedAt = existing.lastActiveAt;
+  }
+
+  /** Hide + scrub profile fields after account deletion. */
+  async scrubDeleted(userId: string): Promise<void> {
+    const existing = this.byUserId.get(userId);
+    if (!existing) return;
+    const stamp = nowIso();
+    this.byUserId.set(userId, {
+      ...existing,
+      displayName: 'Deleted',
+      bio: '',
+      genderIdentity: '',
+      orientationsShown: [],
+      orientationsSeeking: [],
+      lookingFor: [],
+      photoUrls: [],
+      isVisible: false,
+      lastActiveAt: null,
+      updatedAt: stamp,
+    });
   }
 }
 
@@ -141,6 +165,10 @@ class PostgresProfileStore {
     const lookingFor = input.lookingFor ?? existing?.lookingFor ?? [];
     const photoUrls = input.photoUrls ?? existing?.photoUrls ?? [];
     const isVisible = input.isVisible ?? existing?.isVisible ?? true;
+    const displayName =
+      input.displayName !== undefined
+        ? input.displayName.trim()
+        : (existing?.displayName ?? '');
 
     const result = await this.pool.query(
       `INSERT INTO profiles (
@@ -167,7 +195,7 @@ class PostgresProfileStore {
                  photo_urls, age, is_visible, last_active_at, created_at, updated_at`,
       [
         userId,
-        input.displayName.trim(),
+        displayName,
         bio.trim() || null,
         genderIdentity.trim() || null,
         orientationsShown,
@@ -196,6 +224,25 @@ class PostgresProfileStore {
   async touchActive(userId: string): Promise<void> {
     await this.pool.query(
       `UPDATE profiles SET last_active_at = now(), updated_at = now()
+       WHERE user_id = $1`,
+      [userId],
+    );
+  }
+
+  /** Hide + scrub profile fields after account deletion. */
+  async scrubDeleted(userId: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE profiles
+       SET display_name = 'Deleted',
+           bio = '',
+           gender_identity = '',
+           orientations_shown = '{}',
+           orientations_seeking = '{}',
+           looking_for = '{}',
+           photo_urls = '{}',
+           is_visible = FALSE,
+           last_active_at = NULL,
+           updated_at = now()
        WHERE user_id = $1`,
       [userId],
     );

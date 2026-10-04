@@ -63,6 +63,10 @@ class MemoryLocationStore {
     results.sort((a, b) => a.distanceM - b.distanceM);
     return results;
   }
+
+  async remove(userId: string): Promise<void> {
+    this.byUserId.delete(userId);
+  }
 }
 
 class PostgresLocationStore {
@@ -150,6 +154,12 @@ class PostgresLocationStore {
       distanceM: Number(row.distance_m),
     }));
   }
+
+  async remove(userId: string): Promise<void> {
+    await this.pool.query(`DELETE FROM user_locations WHERE user_id = $1`, [
+      userId,
+    ]);
+  }
 }
 
 function rowToLocation(row: Record<string, unknown>): CoarseLocation {
@@ -192,7 +202,7 @@ export async function getLocationStore(): Promise<{
         return { store: new PostgresLocationStore(pool), mode: 'postgis' as const };
       } catch (err) {
         console.warn(
-          '[findr-api] PostGIS unavailable — TODO: enable PostGIS; using in-memory geo',
+          '[findr-api] PostGIS unavailable â€” TODO: enable PostGIS; using in-memory geo',
           err,
         );
         return { store: new MemoryLocationStore(), mode: 'memory' as const };

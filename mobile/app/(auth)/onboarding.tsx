@@ -83,7 +83,7 @@ export default function OnboardingScreen() {
           <View style={styles.heroGlow} />
           <View style={styles.content}>
             <Text style={styles.brand}>Findr</Text>
-            <Text style={styles.headline}>Meet people nearby — on your terms.</Text>
+            <Text style={styles.headline}>Meet people nearby - on your terms.</Text>
             <Text style={styles.support}>
               Inclusive dating and hookups for adults of every orientation. Confirm you
               are 18+ to create an account.

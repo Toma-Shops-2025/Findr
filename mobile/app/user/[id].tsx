@@ -16,7 +16,7 @@ import { useAuth } from '@/lib/auth';
 import { primaryPhotoUrl } from '@/lib/mediaUrl';
 import type { PublicProfile } from '@/lib/types';
 
-/** Peer profile opened from Nearby — loads GET /profiles/:userId. */
+/** Peer profile opened from Nearby - loads GET /profiles/:userId. */
 export default function PeerProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { accessToken } = useAuth();
@@ -103,7 +103,7 @@ export default function PeerProfileScreen() {
           {profile.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
           {profile.lookingFor.length > 0 ? (
             <Text style={styles.meta}>
-              Looking for · {profile.lookingFor.join(', ')}
+              Looking for | {profile.lookingFor.join(', ')}
             </Text>
           ) : null}
           {profile.genderIdentity ? (
@@ -111,7 +111,7 @@ export default function PeerProfileScreen() {
           ) : null}
           {profile.orientationsShown.length > 0 ? (
             <Text style={styles.meta}>
-              {profile.orientationsShown.join(' · ')}
+              {profile.orientationsShown.join(' | ')}
             </Text>
           ) : null}
 

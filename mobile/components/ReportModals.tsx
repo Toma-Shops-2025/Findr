@@ -17,7 +17,7 @@ type Props = {
   onSelect: (reason: ReportReason, label: string) => void;
 };
 
-/** Full-screen reason picker — Alert is limited to 3 buttons on Android. */
+/** Full-screen reason picker - Alert is limited to 3 buttons on Android. */
 export function ReportReasonModal({
   visible,
   displayName,
@@ -71,7 +71,7 @@ export function ReportConfirmModal({
         <View style={styles.sheet}>
           <Text style={styles.title}>Submit report?</Text>
           <Text style={styles.sub}>
-            Report {label} for “{reasonLabel}”. Our moderation queue will review
+            Report {label} for "{reasonLabel}". Our moderation queue will review
             it.
           </Text>
           <Pressable style={styles.dangerOption} onPress={onConfirm}>

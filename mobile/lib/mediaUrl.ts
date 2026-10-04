@@ -1,7 +1,7 @@
 import { getApiBaseUrl } from '@/lib/api';
 
 /**
- * Turn API-relative `/uploads/…` paths into absolute URLs for Image/Video.
+ * Turn API-relative `/uploads/...` paths into absolute URLs for Image/Video.
  * Absolute http(s) and stub: values pass through (stubs return null for display).
  */
 export function resolveMediaUrl(

@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "app.findr.mobile",
-      "versionCode": 9,
+      "versionCode": 11,
       "adaptiveIcon": {
         "backgroundColor": "#12151C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

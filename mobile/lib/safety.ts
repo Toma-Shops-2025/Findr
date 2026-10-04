@@ -47,7 +47,7 @@ export function confirmBlockUser(opts: {
   );
 }
 
-/** POST /safety/report — expects 201. */
+/** POST /safety/report - expects 201. */
 export async function submitReport(opts: {
   token: string;
   userId: string;

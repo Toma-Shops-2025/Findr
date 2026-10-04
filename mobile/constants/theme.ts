@@ -1,8 +1,8 @@
 /**
- * Findr brand tokens — original visual direction.
+ * Findr brand tokens - original visual direction.
  * Warm coral accent on deep ink; not a competitor clone look.
  *
- * System fonts only. Do not reference @expo-google-fonts names here —
+ * System fonts only. Do not reference @expo-google-fonts names here -
  * unloaded custom fontFamily strings can blank text on some Android devices,
  * and font loading must never gate first paint / crash the splash path.
  */
@@ -33,7 +33,7 @@ export const radii = {
   lg: 20,
 } as const;
 
-/** Intentionally undefined — RN uses the platform system font. */
+/** Intentionally undefined - RN uses the platform system font. */
 export const typography = {
   brand: undefined as string | undefined,
   heading: undefined as string | undefined,

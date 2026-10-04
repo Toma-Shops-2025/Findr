@@ -17,7 +17,7 @@ type ReportCtx = {
 };
 
 /**
- * Block (Alert) + Report (Modal — Android-safe) for Nearby / profile / chat.
+ * Block (Alert) + Report (Modal - Android-safe) for Nearby / profile / chat.
  */
 export function useSafetyActions(token: string | null) {
   const [reportCtx, setReportCtx] = useState<ReportCtx | null>(null);
@@ -63,7 +63,7 @@ export function useSafetyActions(token: string | null) {
         });
         const done = reportCtx.onReported;
         closeReport();
-        Alert.alert('Report sent', 'Thanks — Findr received your report.');
+        Alert.alert('Report sent', 'Thanks - Findr received your report.');
         done?.();
       } catch (err) {
         Alert.alert(

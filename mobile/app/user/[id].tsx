@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -117,7 +118,12 @@ export default function PeerProfileScreen() {
 
           <Pressable
             style={styles.primaryBtn}
-            onPress={() => router.push(`/chat/${profile.userId}`)}
+            onPress={() =>
+              Alert.alert(
+                'Chat coming soon',
+                'Messaging returns in Stage 2 with media natives.',
+              )
+            }
           >
             <Text style={styles.primaryBtnText}>Message</Text>
           </Pressable>

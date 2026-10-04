@@ -45,7 +45,7 @@ export default function TermsScreen() {
         {
           heading: '8. Disclaimers & liability',
           body:
-            'THE SERVICE IS PROVIDED AS IS WITHOUT WARRANTIES TO THE EXTENT ALLOWED BY LAW. Findr is not liable for user conduct, offline meetings, or indirect damages, except where liability cannot be limited under applicable law. This section must be customized by counsel for your jurisdiction.',
+            'THE SERVICE IS PROVIDED AS IS WITHOUT WARRANTIES TO THE EXTENT ALLOWED BY LAW. Findr is not liable for user conduct, offline meetings, or indirect damages, except where liability cannot be limited under applicable law. We may update these Terms over time; continued use after an update means you accept the revised Terms.',
         },
         {
           heading: '9. Changes',

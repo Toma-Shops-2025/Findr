@@ -5,7 +5,7 @@ export default function PrivacyScreen() {
     <LegalDocScreen
       title="Privacy Policy"
       updated="2026-10-04"
-      intro="This Privacy Policy explains what Findr collects, why, and your choices. It is an MVP template - customize with counsel before public launch."
+      intro="This Privacy Policy explains what Findr collects, why, and your choices. Please read it so you know how Findr handles your information."
       sections={[
         {
           heading: '1. Who we are',
@@ -20,7 +20,7 @@ export default function PrivacyScreen() {
         {
           heading: '3. How we use data',
           body:
-            'To create and secure accounts, show Nearby results, deliver chat, enforce 18+ and safety rules, improve reliability, and comply with law. We do not sell personal data in the MVP model described here - confirm with counsel before launch.',
+            'To create and secure accounts, show Nearby results, deliver chat, enforce 18+ and safety rules, improve reliability, and comply with law. We do not sell your personal data.',
         },
         {
           heading: '4. Location',
@@ -35,7 +35,7 @@ export default function PrivacyScreen() {
         {
           heading: '6. Retention',
           body:
-            'We keep account and content data while your account is active and for a reasonable period after deletion or inactivity for backups, disputes, and legal needs. Exact periods should be set with counsel.',
+            'We keep account and content data while your account is active and for a reasonable period after deletion or inactivity for backups, disputes, and legal needs.',
         },
         {
           heading: '7. Security',
@@ -55,7 +55,7 @@ export default function PrivacyScreen() {
         {
           heading: '10. International / regional rights',
           body:
-            'Depending on where you live (e.g. GDPR, CCPA), you may have rights to access, correct, delete, or export data. This template does not implement every regional notice - counsel must add required disclosures before launch.',
+            'Depending on where you live (e.g. GDPR, CCPA), you may have rights to access, correct, delete, or export data. Contact contactus@myfindr.fun to exercise those rights.',
         },
         {
           heading: '11. Changes',

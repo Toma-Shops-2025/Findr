@@ -16,8 +16,8 @@ type Props = {
 };
 
 /**
- * Shared layout for in-app legal / FAQ template pages.
- * Copy is an MVP template - not legal advice. Have counsel review before store launch.
+ * Shared layout for in-app legal / FAQ pages.
+ * Internal: counsel should still review before store launch (not shown in UI).
  */
 export function LegalDocScreen({ title, updated, intro, sections }: Props) {
   return (
@@ -30,9 +30,8 @@ export function LegalDocScreen({ title, updated, intro, sections }: Props) {
         <Text style={styles.meta}>Last updated: {updated}</Text>
         <View style={styles.banner}>
           <Text style={styles.bannerText}>
-            TEMPLATE for Findr MVP UX. This is not legal advice and has not been
-            reviewed by a lawyer. Toma should have qualified counsel review and
-            customize this before Play Store / public launch.
+            These policies may be updated from time to time. Continued use of
+            Findr means you accept the current version shown here.
           </Text>
         </View>
         <Text style={styles.body}>{intro}</Text>

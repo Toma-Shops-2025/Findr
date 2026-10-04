@@ -261,9 +261,7 @@ export default function SettingsScreen() {
       <Text style={styles.section}>Legal & help</Text>
       <Pressable style={styles.row} onPress={() => router.push('/legal/terms')}>
         <Text style={styles.rowTitle}>Terms of Service</Text>
-        <Text style={styles.rowMeta}>
-          In-app template - counsel review before launch
-        </Text>
+        <Text style={styles.rowMeta}>Rules for using Findr</Text>
       </Pressable>
       <Pressable style={styles.row} onPress={() => router.push('/legal/privacy')}>
         <Text style={styles.rowTitle}>Privacy Policy</Text>
@@ -325,7 +323,7 @@ export default function SettingsScreen() {
       </Pressable>
       <Pressable style={[styles.row, styles.logout]} onPress={onLogout}>
         <Text style={styles.rowTitle}>Log out</Text>
-        <Text style={styles.rowMeta}>Clears JWT from device session storage</Text>
+        <Text style={styles.rowMeta}>Signs you out on this device.</Text>
       </Pressable>
     </ScrollView>
   );

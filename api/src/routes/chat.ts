@@ -15,7 +15,7 @@ import { getBlockStore } from '../modules/safety/blockStore.js';
 
 /**
  * First-party 1:1 chat (MVP).
- * TODO: buy-vs-build — Stream Chat / Ably / Firebase; mint short-lived vendor tokens.
+ * TODO: buy-vs-build - Stream Chat / Ably / Firebase; mint short-lived vendor tokens.
  * Persistence: Postgres when DATABASE_URL + migrations applied; else in-memory.
  * Photo / video / location messages; double-tap likes via message_likes.
  */
@@ -33,15 +33,32 @@ async function peerDisplayName(peerUserId: string): Promise<string> {
   return user?.email?.split('@')[0] ?? 'Findr user';
 }
 
+async function peerPhotoUrl(peerUserId: string): Promise<string | null> {
+  const profiles = await getProfileStore();
+  const profile = await profiles.get(peerUserId);
+  const urls = profile?.photoUrls ?? [];
+  for (const u of urls) {
+    const trimmed = (u ?? '').trim();
+    if (!trimmed || trimmed.startsWith('stub:')) continue;
+    return trimmed;
+  }
+  return null;
+}
+
 async function toSummary(
   conversation: ConversationRecord,
   me: string,
 ): Promise<ConversationSummary> {
   const other = peerId(conversation, me);
+  const [displayName, photoUrl] = await Promise.all([
+    peerDisplayName(other),
+    peerPhotoUrl(other),
+  ]);
   return {
     id: conversation.id,
     peerUserId: other,
-    peerDisplayName: await peerDisplayName(other),
+    peerDisplayName: displayName,
+    peerPhotoUrl: photoUrl,
     lastMessagePreview: conversation.lastMessagePreview,
     lastMessageAt: conversation.lastMessageAt,
     updatedAt: conversation.updatedAt,
@@ -88,12 +105,12 @@ const sendSchema = z
       .string()
       .max(500)
       .optional()
-      .refine(mediaUrlRefine, { message: 'imageUrl must be /uploads/… or http(s)' }),
+      .refine(mediaUrlRefine, { message: 'imageUrl must be /uploads/... or http(s)' }),
     videoUrl: z
       .string()
       .max(500)
       .optional()
-      .refine(mediaUrlRefine, { message: 'videoUrl must be /uploads/… or http(s)' }),
+      .refine(mediaUrlRefine, { message: 'videoUrl must be /uploads/... or http(s)' }),
     location: locationSchema.optional().nullable(),
   })
   .refine(

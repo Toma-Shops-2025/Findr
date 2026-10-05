@@ -21,9 +21,9 @@ export type MessageRecord = {
   conversationId: string;
   senderId: string;
   body: string;
-  /** Relative /uploads/… or absolute http(s) URL when message includes an image. */
+  /** Relative /uploads/... or absolute http(s) URL when message includes an image. */
   imageUrl: string | null;
-  /** Relative /uploads/… or absolute http(s) URL for short video (max 30s). */
+  /** Relative /uploads/... or absolute http(s) URL for short video (max 30s). */
   videoUrl: string | null;
   location: MessageLocation | null;
   createdAt: string;
@@ -38,6 +38,8 @@ export type ConversationSummary = {
   id: string;
   peerUserId: string;
   peerDisplayName: string;
+  /** Primary peer photo (/uploads/... or https) for Chats list thumbs. */
+  peerPhotoUrl: string | null;
   lastMessagePreview: string | null;
   lastMessageAt: string | null;
   updatedAt: string;

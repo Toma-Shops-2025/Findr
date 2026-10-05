@@ -23,6 +23,7 @@ export default function PeerProfileScreen() {
   const { accessToken } = useAuth();
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [messaging, setMessaging] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -117,15 +118,33 @@ export default function PeerProfileScreen() {
           ) : null}
 
           <Pressable
-            style={styles.primaryBtn}
-            onPress={() =>
-              Alert.alert(
-                'Chat coming soon',
-                'Messaging returns in Stage 2 with media natives.',
-              )
-            }
+            style={[styles.primaryBtn, messaging && styles.primaryBtnDisabled]}
+            disabled={messaging}
+            onPress={async () => {
+              if (!accessToken || !id || messaging) return;
+              setMessaging(true);
+              try {
+                const data = await apiFetch<{
+                  conversation: { id: string };
+                }>('/chat/conversations', {
+                  method: 'POST',
+                  token: accessToken,
+                  body: JSON.stringify({ peerUserId: id }),
+                });
+                router.push(`/chat/${data.conversation.id}`);
+              } catch (err) {
+                Alert.alert(
+                  'Could not open chat',
+                  err instanceof Error ? err.message : 'Try again',
+                );
+              } finally {
+                setMessaging(false);
+              }
+            }}
           >
-            <Text style={styles.primaryBtnText}>Message</Text>
+            <Text style={styles.primaryBtnText}>
+              {messaging ? 'Opening...' : 'Message'}
+            </Text>
           </Pressable>
         </>
       )}
@@ -193,6 +212,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     alignItems: 'center',
   },
+  primaryBtnDisabled: { opacity: 0.6 },
   primaryBtnText: {
     fontFamily: typography.heading,
     color: colors.ink,

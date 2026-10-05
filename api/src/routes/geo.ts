@@ -9,9 +9,11 @@ import { getLocationStore } from '../modules/geo/locationStore.js';
 import { getProfileStore } from '../modules/profiles/profileStore.js';
 import { getBlockStore } from '../modules/safety/blockStore.js';
 
+// Lat/lng/accuracy/radius are floats. Only limit (and age elsewhere) are ints.
 const locationSchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
+  /** Device GPS accuracy in meters (float). Optional. */
   accuracyM: z.number().min(0).max(50_000).optional(),
 });
 
@@ -30,7 +32,7 @@ export type NearbyCard = {
   photoUrls: string[];
   lookingFor: string[];
   distanceLabel: string;
-  /** Approximate only — never exact pin. */
+  /** Approximate only - never exact pin. */
   online: boolean;
 };
 
@@ -74,7 +76,7 @@ export const geoRoutes: FastifyPluginAsync = async (app) => {
       ok: true,
       mode,
       recordedAt: saved.recordedAt,
-      // Coarse coords only — already fuzzed server-side.
+      // Coarse coords only - already fuzzed server-side.
       coarse: {
         latitude: Number(saved.latitude.toFixed(3)),
         longitude: Number(saved.longitude.toFixed(3)),

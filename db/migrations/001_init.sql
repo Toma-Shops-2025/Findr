@@ -36,12 +36,12 @@ CREATE TABLE IF NOT EXISTS profiles (
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Coarse / fuzzed location only — never expose exact pin to clients.
+-- Coarse / fuzzed location only - never expose exact pin to clients.
 CREATE TABLE IF NOT EXISTS user_locations (
   user_id      UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   -- geography point in WGS84; store fuzzed coordinates from the API
   geom         geography(Point, 4326) NOT NULL,
-  accuracy_m   INTEGER,
+  accuracy_m   DOUBLE PRECISION,
   recorded_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );

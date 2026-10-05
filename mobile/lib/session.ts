@@ -18,12 +18,14 @@ export type AuthSession = {
 };
 
 /**
- * SAFE MODE session storage:
- * - Prefers expo-secure-store on native when healthy; falls back to
- *   localStorage (web) or in-memory when SecureStore is missing/mismatched.
+ * Remember-me session storage (JWT + user JSON):
+ * - Prefers expo-secure-store on native when healthy so reopen stays logged in.
+ * - Falls back to localStorage (web) or in-memory when SecureStore is
+ *   missing/mismatched (memory alone will NOT survive process death).
  * - Never throws from get/set/delete / load/save/clear.
  * - Never static-import SecureStore at module top-level (broken native bridge
  *   must not kill cold start).
+ * - Logout calls clearSession() and wipes both keys.
  */
 
 /** Process-local fallback when neither SecureStore nor localStorage works. */

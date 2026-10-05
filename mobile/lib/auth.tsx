@@ -18,11 +18,12 @@ import {
 } from '@/lib/session';
 
 /**
- * SAFE MODE auth:
+ * Auth with remember-me:
+ * - Persist JWT + user via session.ts (expo-secure-store on device).
+ * - Restore SecureStore first, mark ready, then paint.
+ * - Defer /auth/me until after first paint.
+ * - Only clear stored session on 401/403 from /auth/me (not network blips).
  * - Never import @/lib/api at module top-level (expo-file-system is heavy).
- * - Restore SecureStore session only, mark ready, let first paint happen.
- * - Defer /auth/me until after interactions / first paint.
- * - Never throw out of boot; timeouts cannot block the tree.
  */
 async function apiFetchLazy<T>(
   path: string,
@@ -39,11 +40,9 @@ async function apiFetchLazy<T>(
 
 function waitForFirstPaint(): Promise<void> {
   return new Promise((resolve) => {
-    // After interactions + one macrotask so BootFallback / Redirect can paint.
     const handle = InteractionManager.runAfterInteractions(() => {
       setTimeout(resolve, 0);
     });
-    // InteractionManager handle may be a cancellable object; ignore cancel path.
     void handle;
   });
 }
@@ -64,7 +63,10 @@ type LoginInput = {
 type AuthContextValue = {
   user: AuthUser | null;
   accessToken: string | null;
+  /** False until SecureStore restore finishes (or fails). */
   ready: boolean;
+  /** Alias for !ready - used by app/index.tsx gate. */
+  isLoading: boolean;
   signup: (input: SignupInput) => Promise<void>;
   login: (input: LoginInput) => Promise<void>;
   logout: () => Promise<void>;
@@ -72,8 +74,8 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-/** Cap SecureStore restore so hung native storage cannot block first paint. */
-const AUTH_BOOT_TIMEOUT_MS = 2500;
+/** Warn-only; never mark ready early (that redirected to login before restore). */
+const AUTH_BOOT_WARN_MS = 4000;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
@@ -91,10 +93,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const timer = setTimeout(() => {
       console.warn(
-        `Findr auth boot timed out after ${AUTH_BOOT_TIMEOUT_MS}ms; continuing without restored session`,
+        `Findr auth boot still waiting after ${AUTH_BOOT_WARN_MS}ms (SecureStore)`,
       );
-      finish();
-    }, AUTH_BOOT_TIMEOUT_MS);
+    }, AUTH_BOOT_WARN_MS);
 
     (async () => {
       let stored: AuthSession | null = null;
@@ -105,7 +106,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn('Findr auth boot failed; continuing logged out', err);
         if (!cancelled) setSession(null);
       } finally {
-        // First paint: ready after SecureStore only - before any network.
         clearTimeout(timer);
         finish();
       }
@@ -126,13 +126,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const next = { accessToken: stored.accessToken, user: me.user };
         await saveSession(next);
         if (!cancelled) setSession(next);
-      } catch {
-        try {
-          await clearSession();
-        } catch {
-          // ignore
+      } catch (err) {
+        const status = (err as Error & { status?: number }).status;
+        // Only wipe remember-me on hard auth failure. Keep JWT on network /
+        // Render cold-start / 5xx so reopen still works offline briefly.
+        if (status === 401 || status === 403) {
+          try {
+            await clearSession();
+          } catch {
+            // ignore
+          }
+          if (!cancelled) setSession(null);
+        } else {
+          console.warn(
+            'Findr /auth/me refresh failed; keeping stored session',
+            err,
+          );
         }
-        if (!cancelled) setSession(null);
       }
     })();
 
@@ -178,6 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: session?.user ?? null,
       accessToken: session?.accessToken ?? null,
       ready,
+      isLoading: !ready,
       signup,
       login,
       logout,

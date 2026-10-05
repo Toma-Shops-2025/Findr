@@ -11,6 +11,23 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+/** Coerce optional GPS accuracy (meters) to a finite float, else null. */
+function coerceAccuracyM(accuracyM?: number | null): number | null {
+  if (accuracyM == null) return null;
+  const n = Number(accuracyM);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n;
+}
+
+/** Coerce lat/lng/radius to finite floats (never integers / strings). */
+function coerceFloat(value: number, label: string): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) {
+    throw new Error(`invalid_${label}`);
+  }
+  return n;
+}
+
 class MemoryLocationStore {
   private byUserId = new Map<string, CoarseLocation>();
 
@@ -23,9 +40,9 @@ class MemoryLocationStore {
     const stamp = nowIso();
     const next: CoarseLocation = {
       userId,
-      latitude: fuzzCoordinate(latitude),
-      longitude: fuzzCoordinate(longitude),
-      accuracyM: accuracyM ?? null,
+      latitude: fuzzCoordinate(coerceFloat(latitude, 'latitude')),
+      longitude: fuzzCoordinate(coerceFloat(longitude, 'longitude')),
+      accuracyM: coerceAccuracyM(accuracyM),
       recordedAt: stamp,
       updatedAt: stamp,
     };
@@ -47,16 +64,19 @@ class MemoryLocationStore {
     radiusM: number,
     excludeUserId: string,
   ): Promise<Array<CoarseLocation & { distanceM: number }>> {
+    const lat = coerceFloat(latitude, 'latitude');
+    const lng = coerceFloat(longitude, 'longitude');
+    const radius = coerceFloat(radiusM, 'radiusM');
     const results: Array<CoarseLocation & { distanceM: number }> = [];
     for (const loc of this.byUserId.values()) {
       if (loc.userId === excludeUserId) continue;
       const distanceM = haversineMeters(
-        latitude,
-        longitude,
+        lat,
+        lng,
         loc.latitude,
         loc.longitude,
       );
-      if (distanceM <= radiusM) {
+      if (distanceM <= radius) {
         results.push({ ...loc, distanceM });
       }
     }
@@ -78,14 +98,16 @@ class PostgresLocationStore {
     longitude: number,
     accuracyM?: number | null,
   ): Promise<CoarseLocation> {
-    const lat = fuzzCoordinate(latitude);
-    const lng = fuzzCoordinate(longitude);
+    // ST_MakePoint(longitude, latitude) - both floats / double precision.
+    const lat = fuzzCoordinate(coerceFloat(latitude, 'latitude'));
+    const lng = fuzzCoordinate(coerceFloat(longitude, 'longitude'));
+    const accuracy = coerceAccuracyM(accuracyM);
     const result = await this.pool.query(
       `INSERT INTO user_locations (user_id, geom, accuracy_m, recorded_at, updated_at)
        VALUES (
          $1,
-         ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography,
-         $4,
+         ST_SetSRID(ST_MakePoint($2::float8, $3::float8), 4326)::geography,
+         $4::float8,
          now(),
          now()
        )
@@ -100,7 +122,7 @@ class PostgresLocationStore {
          accuracy_m,
          recorded_at,
          updated_at`,
-      [userId, lng, lat, accuracyM ?? null],
+      [userId, lng, lat, accuracy],
     );
     return rowToLocation(result.rows[0]);
   }
@@ -122,6 +144,7 @@ class PostgresLocationStore {
 
   /**
    * PostGIS nearby query. TODO: add freshness TTL filter on updated_at when product locks it.
+   * Params: $1/$2 = lng/lat floats, $3 = exclude user id, $4 = radius meters (float).
    */
   async nearbyWithin(
     latitude: number,
@@ -129,6 +152,9 @@ class PostgresLocationStore {
     radiusM: number,
     excludeUserId: string,
   ): Promise<Array<CoarseLocation & { distanceM: number }>> {
+    const lat = coerceFloat(latitude, 'latitude');
+    const lng = coerceFloat(longitude, 'longitude');
+    const radius = coerceFloat(radiusM, 'radiusM');
     const result = await this.pool.query(
       `SELECT user_id,
               ST_Y(geom::geometry) AS latitude,
@@ -136,18 +162,18 @@ class PostgresLocationStore {
               accuracy_m, recorded_at, updated_at,
               ST_Distance(
                 geom,
-                ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
+                ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326)::geography
               ) AS distance_m
        FROM user_locations
        WHERE user_id <> $3
          AND ST_DWithin(
            geom,
-           ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
-           $4
+           ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326)::geography,
+           $4::float8
          )
        ORDER BY distance_m ASC
        LIMIT 100`,
-      [longitude, latitude, excludeUserId, radiusM],
+      [lng, lat, excludeUserId, radius],
     );
     return result.rows.map((row) => ({
       ...rowToLocation(row),
@@ -202,7 +228,7 @@ export async function getLocationStore(): Promise<{
         return { store: new PostgresLocationStore(pool), mode: 'postgis' as const };
       } catch (err) {
         console.warn(
-          '[findr-api] PostGIS unavailable â€” TODO: enable PostGIS; using in-memory geo',
+          '[findr-api] PostGIS unavailable - TODO: enable PostGIS; using in-memory geo',
           err,
         );
         return { store: new MemoryLocationStore(), mode: 'memory' as const };

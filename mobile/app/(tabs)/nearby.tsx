@@ -27,6 +27,9 @@ type NearbyResponse = {
 
 type Coords = { latitude: number; longitude: number; accuracyM?: number };
 
+/** Show the green privacy line once per app session (not every refresh). */
+let privacyFuzzNoteShown = false;
+
 async function resolveConsentedCoords(): Promise<{
   coords: Coords;
   source: 'gps' | 'demo';
@@ -56,7 +59,8 @@ async function resolveConsentedCoords(): Promise<{
         latitude: pos.coords.latitude,
         longitude: pos.coords.longitude,
         accuracyM:
-          typeof pos.coords.accuracy === 'number'
+          typeof pos.coords.accuracy === 'number' &&
+          Number.isFinite(pos.coords.accuracy)
             ? pos.coords.accuracy
             : undefined,
       },
@@ -114,16 +118,24 @@ export default function NearbyScreen() {
           await resolveConsentedCoords();
         const fuzzed = fuzzLatLng(coords.latitude, coords.longitude);
 
+        // Lat/lng stay floats. accuracyM is also a float (meters) - API column
+        // is DOUBLE PRECISION after migration 007. Do not coerce to int.
+        const body: {
+          latitude: number;
+          longitude: number;
+          accuracyM?: number;
+        } = {
+          latitude: fuzzed.latitude,
+          longitude: fuzzed.longitude,
+        };
+        if (coords.accuracyM != null && Number.isFinite(coords.accuracyM)) {
+          body.accuracyM = coords.accuracyM;
+        }
+
         await apiFetch('/geo/location', {
           method: 'POST',
           token: accessToken,
-          body: JSON.stringify({
-            latitude: fuzzed.latitude,
-            longitude: fuzzed.longitude,
-            ...(coords.accuracyM != null
-              ? { accuracyM: coords.accuracyM }
-              : {}),
-          }),
+          body: JSON.stringify(body),
         });
 
         const data = await apiFetch<NearbyResponse>(
@@ -139,8 +151,9 @@ export default function NearbyScreen() {
           );
         } else if (source === 'demo') {
           notes.push('GPS unavailable - using demo area.');
-        } else {
-          notes.push('Using approximate location (fuzzed for privacy).');
+        } else if (!privacyFuzzNoteShown) {
+          privacyFuzzNoteShown = true;
+          notes.push('Approximate location on.');
         }
         if (data.mode === 'memory') {
           notes.push(
@@ -180,9 +193,8 @@ export default function NearbyScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.sub}>
-        People near you - distances are approximate
-      </Text>
+      <Text style={styles.brand}>Findr</Text>
+      <Text style={styles.sub}>Nearby - distances are approximate</Text>
       {modeNote ? <Text style={styles.note}>{modeNote}</Text> : null}
       {error ? (
         <View style={styles.stateBox}>
@@ -209,7 +221,7 @@ export default function NearbyScreen() {
       <FlatList
         data={items}
         keyExtractor={(item) => item.userId}
-        numColumns={2}
+        numColumns={3}
         columnWrapperStyle={styles.row}
         contentContainerStyle={styles.list}
         refreshControl={
@@ -228,10 +240,13 @@ export default function NearbyScreen() {
               <NearbyPhoto item={item} />
               {item.online ? <View style={styles.onlineDot} /> : null}
             </View>
-            <Text style={styles.name}>
-              {item.displayName}, {item.age}
+            <Text style={styles.name} numberOfLines={1}>
+              {item.displayName}
             </Text>
-            <Text style={styles.meta}>{item.distanceLabel}</Text>
+            <Text style={styles.meta} numberOfLines={1}>
+              {item.age != null ? item.age + ' | ' : ''}
+              {item.distanceLabel}
+            </Text>
           </Pressable>
         )}
       />
@@ -251,20 +266,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.md,
   },
+  brand: {
+    fontFamily: typography.brand,
+    color: colors.coral,
+    fontSize: 22,
+    letterSpacing: -0.5,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+  },
   sub: {
     fontFamily: typography.body,
     color: colors.mistMuted,
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
-    fontSize: 13,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xs,
+    fontSize: 12,
   },
   note: {
     fontFamily: typography.body,
     color: colors.teal,
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.sm,
-    fontSize: 12,
+    paddingBottom: spacing.xs,
+    fontSize: 11,
+    opacity: 0.9,
   },
   stateBox: {
     paddingHorizontal: spacing.lg,
@@ -302,21 +326,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   list: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     paddingBottom: spacing.xl,
+    paddingTop: spacing.xs,
   },
   row: {
-    gap: spacing.md,
-    marginBottom: spacing.md,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   card: {
     flex: 1,
-    gap: spacing.xs,
-    marginBottom: spacing.md,
+    maxWidth: '33.33%',
+    gap: 2,
   },
   photo: {
     aspectRatio: 3 / 4,
-    borderRadius: radii.lg,
+    borderRadius: radii.sm,
     backgroundColor: colors.inkElevated,
     borderWidth: 1,
     borderColor: colors.border,
@@ -327,26 +352,28 @@ const styles = StyleSheet.create({
   photoImage: { width: '100%', height: '100%' },
   initial: {
     fontFamily: typography.brand,
-    fontSize: 42,
+    fontSize: 28,
     color: colors.coral,
   },
   onlineDot: {
     position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: colors.online,
   },
   name: {
     fontFamily: typography.heading,
     color: colors.mist,
-    fontSize: 15,
+    fontSize: 12,
+    paddingHorizontal: 2,
   },
   meta: {
     fontFamily: typography.body,
     color: colors.mistMuted,
-    fontSize: 12,
+    fontSize: 10,
+    paddingHorizontal: 2,
   },
 });

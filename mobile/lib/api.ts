@@ -81,10 +81,10 @@ function guessImageMime(name: string): string {
 }
 
 /**
- * Stage 2b: photo upload only (profile / future chat-album images).
+ * Stage 2d: photo upload (profile / chat / album images).
  * SDK 57: use expo-file-system/legacy uploadAsync -- do NOT append RN
  * { uri, name, type } into FormData + fetch (Unsupported FormDataPart).
- * Video upload stays parked until Stage 2d.
+ * Video upload stays parked until Stage 2e.
  */
 export async function apiUploadMedia(
   localUri: string,
@@ -98,7 +98,7 @@ export async function apiUploadMedia(
   },
 ): Promise<UploadResult> {
   if (opts.mediaType !== 'photo') {
-    throw new Error('Video upload returns in a later Stage 2 slice');
+    throw new Error('Video upload returns in Stage 2e');
   }
 
   const name = opts.fileName ?? localUri.split('/').pop() ?? 'photo.jpg';
@@ -170,7 +170,7 @@ export async function apiUploadMedia(
   return data;
 }
 
-/** Profile / image helper -- Stage 2b photo path. */
+/** Profile / image helper -- photo path. */
 export async function apiUploadImage(
   localUri: string,
   opts: { token: string; kind: UploadKind; fileName?: string },
@@ -182,9 +182,25 @@ export async function apiUploadImage(
   });
 }
 
-/** Album UI stays parked until Stage 2d. */
-export async function apiListAlbum(): Promise<AlbumItem[]> {
-  return [];
+/** Stage 2d: list personal Findr album (newest first). */
+export async function apiListAlbum(
+  token: string,
+  limit = 100,
+): Promise<AlbumItem[]> {
+  const data = await apiFetch<{ items: AlbumItem[] }>(
+    `/media/album?limit=${encodeURIComponent(String(limit))}`,
+    { token },
+  );
+  return data.items ?? [];
 }
 
-export async function apiDeleteAlbumItem(): Promise<void> {}
+/** Stage 2d: delete one album item owned by the current user. */
+export async function apiDeleteAlbumItem(
+  token: string,
+  id: string,
+): Promise<void> {
+  await apiFetch(`/media/album/${id}`, {
+    method: 'DELETE',
+    token,
+  });
+}

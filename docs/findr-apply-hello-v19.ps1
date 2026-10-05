@@ -7,6 +7,19 @@ $RepoRoot = "C:\Findr"
 $MobileShort = "C:\F\mobile"
 
 Write-Host "==> git pull in $RepoRoot"
+if (-not (Test-Path "$RepoRoot\.git")) {
+  Write-Host ""
+  Write-Host "ERROR: $RepoRoot is not a git clone (no .git folder)."
+  Write-Host "C:\F\mobile alone is not enough — clone the full repo once, then pull."
+  Write-Host ""
+  Write-Host "If $RepoRoot is only copied files, rename it, then clone:"
+  Write-Host "  Rename-Item $RepoRoot C:\Findr-backup"
+  Write-Host "  git clone https://github.com/Toma-Shops-2025/Findr.git $RepoRoot"
+  Write-Host "  cd $RepoRoot"
+  Write-Host "  git checkout cursor/hello-attention-stay-signed-in-v19-80cc   # or main after PR merge"
+  Write-Host ""
+  exit 1
+}
 Set-Location $RepoRoot
 git pull
 

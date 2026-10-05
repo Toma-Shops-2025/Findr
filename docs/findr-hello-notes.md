@@ -34,9 +34,22 @@ node ..\db\scripts\apply-migration.mjs ..\db\migrations\008_hello_attention.sql
 
 ## Windows dual-folder workflow
 
-Toma keeps **git** at `C:\Findr` and runs **EAS / Metro** from `C:\F\mobile` (short path). After pulling this branch:
+Toma keeps **git** at `C:\Findr` and runs **EAS / Metro** from `C:\F\mobile` (short path).
 
-1. `C:\Findr` — `git pull` (this PR branch).
+`git pull` only works if `C:\Findr` is a **clone** (folder contains `.git`). If you only copied `mobile` into `C:\F`, or copied the project without `.git`, use a one-time clone:
+
+```powershell
+# Only if C:\Findr is NOT a repo (fatal: not a git repository)
+Rename-Item C:\Findr C:\Findr-backup -ErrorAction SilentlyContinue
+git clone https://github.com/Toma-Shops-2025/Findr.git C:\Findr
+cd C:\Findr
+git checkout cursor/hello-attention-stay-signed-in-v19-80cc
+# after PR #2 is merged: git checkout main && git pull
+```
+
+After `C:\Findr` is a real repo:
+
+1. `C:\Findr` — `git pull` (on `main` or the feature branch above).
 2. Copy `C:\Findr\mobile` → `C:\F\mobile` (overwrite).
 3. Run migration **008** (command above) against production Postgres.
 4. **Render:** deploy **findr-api** service from `main` (or merge PR first).

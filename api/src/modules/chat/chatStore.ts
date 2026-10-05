@@ -2,6 +2,10 @@ import { randomUUID } from 'node:crypto';
 import type pg from 'pg';
 
 import { getPool } from '../db.js';
+import {
+  HELLO_ATTENTION_BODY,
+  type HelloAttentionResult,
+} from './helloAttention.js';
 import type {
   ConversationRecord,
   MessageLocation,
@@ -130,12 +134,18 @@ function normalizeLocation(
   };
 }
 
+function utcDateKey(iso = new Date().toISOString()): string {
+  return iso.slice(0, 10);
+}
+
 class MemoryChatStore {
   private conversations = new Map<string, ConversationRecord>();
   private pairIndex = new Map<string, string>();
   private messagesByConv = new Map<string, MessageRecord[]>();
   /** messageId -> set of userIds who liked */
   private likes = new Map<string, Set<string>>();
+  /** sender:recipient:YYYY-MM-DD -> messageId (hello attention rate limit) */
+  private helloAttentionDay = new Map<string, string>();
 
   private pairKey(a: string, b: string): string {
     const [x, y] = orderedPair(a, b);
@@ -303,6 +313,46 @@ class MemoryChatStore {
     this.likes.get(messageId)?.delete(userId);
     const meta = this.likeMeta(messageId, userId);
     return withLikes(message, meta.likedByMe, meta.likeCount);
+  }
+
+  async sendHelloAttention(
+    senderId: string,
+    peerUserId: string,
+  ): Promise<HelloAttentionResult & { conversation: ConversationRecord }> {
+    const { conversation, created } = await this.findOrCreatePair(
+      senderId,
+      peerUserId,
+    );
+    const existing = this.messagesByConv.get(conversation.id) ?? [];
+    if (existing.length > 0) {
+      const lastMessage = existing[existing.length - 1]!;
+      return {
+        conversation,
+        conversationId: conversation.id,
+        messageId: lastMessage.id,
+        created,
+        sent: false,
+      };
+    }
+
+    const dayKey = `${senderId}:${peerUserId}:${utcDateKey()}`;
+    if (this.helloAttentionDay.has(dayKey)) {
+      throw Object.assign(new Error('hello_rate_limited'), {
+        code: 'hello_rate_limited',
+      });
+    }
+
+    const message = await this.sendMessage(conversation.id, senderId, {
+      body: HELLO_ATTENTION_BODY,
+    });
+    this.helloAttentionDay.set(dayKey, message.id);
+    return {
+      conversation,
+      conversationId: conversation.id,
+      messageId: message.id,
+      created,
+      sent: true,
+    };
   }
 }
 
@@ -565,6 +615,82 @@ class PostgresChatStore {
       [messageId, userId],
     );
     return this.loadMessageWithLikes(conversationId, messageId, userId);
+  }
+
+  async sendHelloAttention(
+    senderId: string,
+    peerUserId: string,
+  ): Promise<HelloAttentionResult & { conversation: ConversationRecord }> {
+    const { conversation, created } = await this.findOrCreatePair(
+      senderId,
+      peerUserId,
+    );
+
+    const countResult = await this.pool.query<{ n: string }>(
+      `SELECT COUNT(*)::text AS n FROM messages WHERE conversation_id = $1`,
+      [conversation.id],
+    );
+    const messageCount = Number(countResult.rows[0]?.n ?? '0');
+    if (messageCount > 0) {
+      const last = await this.pool.query<{ id: string }>(
+        `SELECT id FROM messages
+         WHERE conversation_id = $1
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [conversation.id],
+      );
+      const lastId = last.rows[0]?.id;
+      return {
+        conversation,
+        conversationId: conversation.id,
+        messageId: lastId ? String(lastId) : '',
+        created,
+        sent: false,
+      };
+    }
+
+    const rate = await this.pool.query(
+      `SELECT 1
+       FROM hello_attentions
+       WHERE sender_id = $1
+         AND recipient_id = $2
+         AND (timezone('UTC', created_at))::date = (timezone('UTC', now()))::date
+       LIMIT 1`,
+      [senderId, peerUserId],
+    );
+    if (rate.rows[0]) {
+      throw Object.assign(new Error('hello_rate_limited'), {
+        code: 'hello_rate_limited',
+      });
+    }
+
+    const message = await this.sendMessage(conversation.id, senderId, {
+      body: HELLO_ATTENTION_BODY,
+    });
+    try {
+      await this.pool.query(
+        `INSERT INTO hello_attentions
+           (sender_id, recipient_id, conversation_id, message_id)
+         VALUES ($1, $2, $3, $4)`,
+        [senderId, peerUserId, conversation.id, message.id],
+      );
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      if (code === '23505') {
+        throw Object.assign(new Error('hello_rate_limited'), {
+          code: 'hello_rate_limited',
+        });
+      }
+      throw err;
+    }
+    const refreshed = await this.getById(conversation.id);
+    return {
+      conversation: refreshed ?? conversation,
+      conversationId: conversation.id,
+      messageId: message.id,
+      created,
+      sent: true,
+    };
   }
 }
 

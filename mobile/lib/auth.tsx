@@ -58,6 +58,8 @@ type SignupInput = {
 type LoginInput = {
   email: string;
   password: string;
+  /** Default true in UI — when false, session is not written to SecureStore. */
+  staySignedIn?: boolean;
 };
 
 type AuthContextValue = {
@@ -162,11 +164,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (input: LoginInput) => {
+    const { staySignedIn = true, email, password } = input;
     const data = await apiFetchLazy<AuthSession>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify(input),
+      body: JSON.stringify({ email, password }),
     });
-    await saveSession(data);
+    if (staySignedIn) {
+      await saveSession(data);
+    } else {
+      await clearSession();
+      await saveSession(data, { persist: false });
+    }
     setSession(data);
   }, []);
 

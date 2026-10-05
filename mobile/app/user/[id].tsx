@@ -24,6 +24,7 @@ export default function PeerProfileScreen() {
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [messaging, setMessaging] = useState(false);
+  const [helloBusy, setHelloBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -117,35 +118,83 @@ export default function PeerProfileScreen() {
             </Text>
           ) : null}
 
-          <Pressable
-            style={[styles.primaryBtn, messaging && styles.primaryBtnDisabled]}
-            disabled={messaging}
-            onPress={async () => {
-              if (!accessToken || !id || messaging) return;
-              setMessaging(true);
-              try {
-                const data = await apiFetch<{
-                  conversation: { id: string };
-                }>('/chat/conversations', {
-                  method: 'POST',
-                  token: accessToken,
-                  body: JSON.stringify({ peerUserId: id }),
-                });
-                router.push(`/chat/${data.conversation.id}`);
-              } catch (err) {
-                Alert.alert(
-                  'Could not open chat',
-                  err instanceof Error ? err.message : 'Try again',
-                );
-              } finally {
-                setMessaging(false);
-              }
-            }}
-          >
-            <Text style={styles.primaryBtnText}>
-              {messaging ? 'Opening...' : 'Message'}
-            </Text>
-          </Pressable>
+          <View style={styles.actionRow}>
+            <Pressable
+              style={[
+                styles.helloBtn,
+                (helloBusy || messaging) && styles.primaryBtnDisabled,
+              ]}
+              disabled={helloBusy || messaging}
+              onPress={async () => {
+                if (!accessToken || !id || helloBusy || messaging) return;
+                setHelloBusy(true);
+                try {
+                  const data = await apiFetch<{
+                    conversation: { id: string };
+                    sent: boolean;
+                  }>('/chat/hello-attention', {
+                    method: 'POST',
+                    token: accessToken,
+                    body: JSON.stringify({ peerUserId: id }),
+                  });
+                  router.push(`/chat/${data.conversation.id}`);
+                } catch (err) {
+                  const code = (err as { code?: string }).code;
+                  if (code === 'hello_rate_limited') {
+                    Alert.alert(
+                      'Hello limit',
+                      'You can send one hello to this person per day. Open Message to keep chatting.',
+                    );
+                  } else {
+                    Alert.alert(
+                      'Could not say hello',
+                      err instanceof Error ? err.message : 'Try again',
+                    );
+                  }
+                } finally {
+                  setHelloBusy(false);
+                }
+              }}
+            >
+              <Text style={styles.helloBtnText}>
+                {helloBusy ? 'Sending...' : 'Say Hello'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.primaryBtn,
+                styles.messageBtn,
+                messaging && styles.primaryBtnDisabled,
+              ]}
+              disabled={messaging || helloBusy}
+              onPress={async () => {
+                if (!accessToken || !id || messaging) return;
+                setMessaging(true);
+                try {
+                  const data = await apiFetch<{
+                    conversation: { id: string };
+                  }>('/chat/conversations', {
+                    method: 'POST',
+                    token: accessToken,
+                    body: JSON.stringify({ peerUserId: id }),
+                  });
+                  router.push(`/chat/${data.conversation.id}`);
+                } catch (err) {
+                  Alert.alert(
+                    'Could not open chat',
+                    err instanceof Error ? err.message : 'Try again',
+                  );
+                } finally {
+                  setMessaging(false);
+                }
+              }}
+            >
+              <Text style={styles.primaryBtnText}>
+                {messaging ? 'Opening...' : 'Message'}
+              </Text>
+            </Pressable>
+          </View>
         </>
       )}
     </ScrollView>
@@ -205,12 +254,34 @@ const styles = StyleSheet.create({
     color: colors.mistMuted,
     fontSize: 13,
   },
-  primaryBtn: {
+  actionRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
     marginTop: spacing.md,
+  },
+  helloBtn: {
+    flex: 1,
+    backgroundColor: colors.inkElevated,
+    borderWidth: 1,
+    borderColor: colors.teal,
+    borderRadius: radii.md,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+  },
+  helloBtnText: {
+    fontFamily: typography.heading,
+    color: colors.teal,
+    fontSize: 16,
+  },
+  primaryBtn: {
+    flex: 1,
     backgroundColor: colors.coral,
     borderRadius: radii.md,
     paddingVertical: spacing.md,
     alignItems: 'center',
+  },
+  messageBtn: {
+    marginTop: 0,
   },
   primaryBtnDisabled: { opacity: 0.6 },
   primaryBtnText: {

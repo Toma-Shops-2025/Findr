@@ -199,8 +199,22 @@ async function safeDelete(key: string): Promise<void> {
   }
 }
 
-export async function saveSession(session: AuthSession): Promise<void> {
+export type SaveSessionOptions = {
+  /** When false, keep JWT in memory only (this app session; cleared on logout). */
+  persist?: boolean;
+};
+
+export async function saveSession(
+  session: AuthSession,
+  options: SaveSessionOptions = {},
+): Promise<void> {
+  const persist = options.persist ?? true;
   try {
+    if (!persist) {
+      memoryStore.set(TOKEN_KEY, session.accessToken);
+      memoryStore.set(USER_KEY, JSON.stringify(session.user));
+      return;
+    }
     await safeSet(TOKEN_KEY, session.accessToken);
     await safeSet(USER_KEY, JSON.stringify(session.user));
   } catch (err) {

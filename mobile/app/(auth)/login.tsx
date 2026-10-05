@@ -17,6 +17,7 @@ export default function LoginScreen() {
   const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [staySignedIn, setStaySignedIn] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -24,7 +25,11 @@ export default function LoginScreen() {
     setError(null);
     setBusy(true);
     try {
-      await login({ email: email.trim(), password });
+      await login({
+        email: email.trim(),
+        password,
+        staySignedIn,
+      });
       router.replace('/(tabs)/nearby');
     } catch (err) {
       const code = (err as { code?: string }).code;
@@ -65,6 +70,16 @@ export default function LoginScreen() {
           autoCapitalize="none"
           style={styles.input}
         />
+
+        <Pressable
+          onPress={() => setStaySignedIn((v) => !v)}
+          style={styles.checkRow}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: staySignedIn }}
+        >
+          <View style={[styles.checkbox, staySignedIn && styles.checkboxOn]} />
+          <Text style={styles.checkText}>Stay signed in</Text>
+        </Pressable>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -172,5 +187,30 @@ const styles = StyleSheet.create({
     color: colors.teal,
     fontSize: 15,
     textAlign: 'center',
+  },
+  checkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.inkElevated,
+  },
+  checkboxOn: {
+    backgroundColor: colors.teal,
+    borderColor: colors.teal,
+  },
+  checkText: {
+    flex: 1,
+    fontFamily: typography.body,
+    color: colors.mist,
+    fontSize: 15,
+    lineHeight: 22,
   },
 });

@@ -85,6 +85,10 @@ const openSchema = z.object({
   peerUserId: z.string().uuid().or(z.string().min(1).max(80)),
 });
 
+const helloSchema = z.object({
+  peerUserId: z.string().uuid().or(z.string().min(1).max(80)),
+});
+
 const mediaUrlRefine = (u: string | null | undefined) =>
   u == null ||
   u === '' ||
@@ -260,6 +264,60 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       conversation: await toSummary(conversation, auth.userId),
       created,
     };
+  });
+
+  app.post('/hello-attention', async (req, reply) => {
+    const auth = await requireAuth(req, reply);
+    if (!auth) return;
+
+    const parsed = helloSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: 'invalid_body',
+        details: parsed.error.flatten(),
+      });
+    }
+
+    const peerUserId = parsed.data.peerUserId;
+    if (peerUserId === auth.userId) {
+      return reply.code(400).send({ error: 'cannot_chat_self' });
+    }
+
+    const users = await getUserStore();
+    const peer = await users.findById(peerUserId);
+    if (!peer) {
+      return reply.code(404).send({ error: 'peer_not_found' });
+    }
+
+    const blocks = await getBlockStore();
+    const blocked = await blocks.blockedPairIds(auth.userId);
+    if (blocked.has(peerUserId)) {
+      return reply.code(403).send({
+        error: 'blocked',
+        message: 'Cannot reach this user',
+      });
+    }
+
+    const store = await getChatStore();
+    try {
+      const result = await store.sendHelloAttention(auth.userId, peerUserId);
+      return {
+        conversation: await toSummary(result.conversation, auth.userId),
+        conversationId: result.conversationId,
+        messageId: result.messageId,
+        sent: result.sent,
+        created: result.created,
+      };
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      if (code === 'hello_rate_limited') {
+        return reply.code(429).send({
+          error: 'hello_rate_limited',
+          message: 'You can send one hello to this person per day.',
+        });
+      }
+      throw err;
+    }
   });
 
   app.get<{ Params: { id: string }; Querystring: { limit?: string } }>(

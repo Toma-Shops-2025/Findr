@@ -1,23 +1,8 @@
-import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import type { ComponentProps } from 'react';
-import { Text, type ColorValue } from 'react-native';
+import { Text } from 'react-native';
 
+import { TabBarSymbol } from '@/components/TabBarSymbol';
 import { colors, typography } from '@/constants/theme';
-
-type IoniconName = ComponentProps<typeof Ionicons>['name'];
-
-function TabIcon({
-  name,
-  color,
-  size,
-}: {
-  name: IoniconName;
-  color: ColorValue;
-  size: number;
-}) {
-  return <Ionicons name={name} size={size} color={color} />;
-}
 
 function TabLabel({ label, focused }: { label: string; focused: boolean }) {
   return (
@@ -53,7 +38,7 @@ export default function TabsLayout() {
         options={{
           title: 'Nearby',
           tabBarIcon: ({ color, size }) => (
-            <TabIcon name="compass-outline" color={color} size={size} />
+            <TabBarSymbol id="nearby" color={color} size={size} />
           ),
           tabBarLabel: ({ focused }) => <TabLabel label="Nearby" focused={focused} />,
         }}
@@ -63,7 +48,7 @@ export default function TabsLayout() {
         options={{
           title: 'Chats',
           tabBarIcon: ({ color, size }) => (
-            <TabIcon name="chatbubbles-outline" color={color} size={size} />
+            <TabBarSymbol id="chats" color={color} size={size} />
           ),
           tabBarLabel: ({ focused }) => <TabLabel label="Chats" focused={focused} />,
         }}
@@ -73,7 +58,7 @@ export default function TabsLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, size }) => (
-            <TabIcon name="person-outline" color={color} size={size} />
+            <TabBarSymbol id="profile" color={color} size={size} />
           ),
           tabBarLabel: ({ focused }) => <TabLabel label="Profile" focused={focused} />,
         }}
@@ -83,7 +68,7 @@ export default function TabsLayout() {
         options={{
           title: 'Safety',
           tabBarIcon: ({ color, size }) => (
-            <TabIcon name="shield-checkmark-outline" color={color} size={size} />
+            <TabBarSymbol id="safety" color={color} size={size} />
           ),
           tabBarLabel: ({ focused }) => <TabLabel label="Safety" focused={focused} />,
         }}

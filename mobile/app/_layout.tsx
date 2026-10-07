@@ -1,13 +1,30 @@
+import { Ionicons } from "@expo/vector-icons";
 import { Stack } from "expo-router";
+import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import { colors } from "@/constants/theme";
 import { AuthProvider } from "@/lib/auth";
+
 export { ErrorBoundary } from "expo-router";
 export const unstable_settings = { initialRouteName: "index" };
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 export default function RootLayout() {
-  useEffect(() => { SplashScreen.hideAsync().catch(() => {}); }, []);
+  const [fontsLoaded] = useFonts({ ...Ionicons.font });
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [fontsLoaded]);
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
     <AuthProvider>
       <StatusBar style="light" />

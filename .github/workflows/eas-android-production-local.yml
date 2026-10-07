@@ -1,0 +1,46 @@
+# Build production Android AAB on Linux (free GitHub runners).
+# Does NOT use EAS cloud build quota (--local runs on the runner).
+# Requires repo secret EXPO_TOKEN (https://expo.dev/settings/access-tokens).
+
+name: Android production AAB (EAS local)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: EAS local production build
+        run: eas build -p android --profile production --local --non-interactive
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: findr-production-aab
+          path: |
+            mobile/**/*.aab
+            mobile/build/**/*.aab
+          if-no-files-found: error

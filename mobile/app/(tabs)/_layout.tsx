@@ -1,7 +1,23 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
+import type { ComponentProps } from 'react';
 import { Text } from 'react-native';
 
 import { colors, typography } from '@/constants/theme';
+
+type IoniconName = ComponentProps<typeof Ionicons>['name'];
+
+function TabIcon({
+  name,
+  color,
+  size,
+}: {
+  name: IoniconName;
+  color: string;
+  size: number;
+}) {
+  return <Ionicons name={name} size={size} color={color} />;
+}
 
 function TabLabel({ label, focused }: { label: string; focused: boolean }) {
   return (
@@ -36,6 +52,9 @@ export default function TabsLayout() {
         name="nearby"
         options={{
           title: 'Nearby',
+          tabBarIcon: ({ color, size }) => (
+            <TabIcon name="compass-outline" color={color} size={size} />
+          ),
           tabBarLabel: ({ focused }) => <TabLabel label="Nearby" focused={focused} />,
         }}
       />
@@ -43,6 +62,9 @@ export default function TabsLayout() {
         name="chats"
         options={{
           title: 'Chats',
+          tabBarIcon: ({ color, size }) => (
+            <TabIcon name="chatbubbles-outline" color={color} size={size} />
+          ),
           tabBarLabel: ({ focused }) => <TabLabel label="Chats" focused={focused} />,
         }}
       />
@@ -50,6 +72,9 @@ export default function TabsLayout() {
         name="profile"
         options={{
           title: 'Profile',
+          tabBarIcon: ({ color, size }) => (
+            <TabIcon name="person-outline" color={color} size={size} />
+          ),
           tabBarLabel: ({ focused }) => <TabLabel label="Profile" focused={focused} />,
         }}
       />
@@ -57,6 +82,9 @@ export default function TabsLayout() {
         name="settings"
         options={{
           title: 'Safety',
+          tabBarIcon: ({ color, size }) => (
+            <TabIcon name="shield-checkmark-outline" color={color} size={size} />
+          ),
           tabBarLabel: ({ focused }) => <TabLabel label="Safety" focused={focused} />,
         }}
       />

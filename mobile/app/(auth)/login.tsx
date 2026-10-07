@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PasswordField } from '@/components/PasswordField';
 import { colors, radii, spacing, typography } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
 
@@ -61,14 +62,12 @@ export default function LoginScreen() {
         />
 
         <Text style={styles.label}>Password</Text>
-        <TextInput
+        <PasswordField
           value={password}
           onChangeText={setPassword}
           placeholder="Your password"
-          placeholderTextColor={colors.mistMuted}
-          secureTextEntry
-          autoCapitalize="none"
-          style={styles.input}
+          returnKeyType="done"
+          onSubmitEditing={onLogin}
         />
 
         <Pressable

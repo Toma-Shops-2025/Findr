@@ -21,9 +21,9 @@
       }
     },
     "production": {
-      "distribution": "internal",
+      "distribution": "store",
       "android": {
-        "buildType": "apk"
+        "buildType": "app-bundle"
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.myfindr.fun"

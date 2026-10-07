@@ -4,8 +4,8 @@ export default function GuidelinesScreen() {
   return (
     <LegalDocScreen
       title="Community Guidelines"
-      updated="2026-10-04"
-      intro="Findr should feel inclusive and adult. These guidelines summarize what is okay and what gets you removed. They work together with the Terms of Service."
+      updated="2026-10-07"
+      intro="Findr is an adults-only (18+) dating and social app. Consensual adult content, including nudity, may be shared in profiles and private chat. Illegal content, minors, and abuse are never allowed. These guidelines work together with the Terms of Service."
       sections={[
         {
           heading: 'Be 18+',
@@ -20,7 +20,7 @@ export default function GuidelinesScreen() {
         {
           heading: 'Photos & media',
           body:
-            'Only post photos you have the right to use. No non-consensual intimate imagery. No illegal content. Keep profile photos reasonably appropriate for a public discovery grid.',
+            'Only post photos you have the right to share. Consensual adult nudity is allowed for adults 18+ in profiles and chat, subject to these rules and applicable law. Never post anyone under 18, non-consensual intimate imagery (NCII), threats, or illegal content. Do not share another person\'s images without their permission.',
         },
         {
           heading: 'No scams or spam',

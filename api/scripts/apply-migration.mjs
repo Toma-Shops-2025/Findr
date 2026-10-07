@@ -19,16 +19,28 @@ if (!fileArg) {
   process.exit(1);
 }
 
-const databaseUrl = process.env.DATABASE_URL;
+let databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
   console.error('DATABASE_URL is not set.');
   process.exit(1);
 }
 
+/** Render external Postgres requires SSL from home PCs. */
+if (
+  /\.render\.com/i.test(databaseUrl) &&
+  !/sslmode=/i.test(databaseUrl)
+) {
+  databaseUrl += databaseUrl.includes('?') ? '&sslmode=require' : '?sslmode=require';
+}
+
 const sqlPath = resolve(process.cwd(), fileArg);
 const sql = readFileSync(sqlPath, 'utf8');
 
-const pool = new pg.Pool({ connectionString: databaseUrl });
+const pool = new pg.Pool({
+  connectionString: databaseUrl,
+  connectionTimeoutMillis: 30_000,
+  ssl: /\.render\.com/i.test(databaseUrl) ? { rejectUnauthorized: false } : undefined,
+});
 try {
   await pool.query(sql);
   console.log(`Applied migration: ${fileArg}`);

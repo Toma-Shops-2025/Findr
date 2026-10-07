@@ -36,6 +36,17 @@ if (
 const sqlPath = resolve(process.cwd(), fileArg);
 const sql = readFileSync(sqlPath, 'utf8');
 
+let dbHost = '(unknown)';
+try {
+  const normalized = databaseUrl.replace(/^postgresql:/i, 'http:');
+  dbHost = new URL(normalized).hostname;
+} catch {
+  /* keep default */
+}
+console.log(`DATABASE_URL host: ${dbHost}`);
+console.log(`Reading SQL: ${sqlPath}`);
+console.log('Running migration…');
+
 const pool = new pg.Pool({
   connectionString: databaseUrl,
   connectionTimeoutMillis: 30_000,

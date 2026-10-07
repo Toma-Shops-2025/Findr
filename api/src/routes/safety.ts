@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireAuth } from '../modules/auth/requireAuth.js';
 import { getUserStore } from '../modules/auth/userStore.js';
+import { sanitizeDisplayNameForPublic } from '../modules/profiles/publicDisplay.js';
 import { getProfileStore } from '../modules/profiles/profileStore.js';
 import { getBlockStore } from '../modules/safety/blockStore.js';
 
@@ -61,7 +62,10 @@ export const safetyRoutes: FastifyPluginAsync = async (app) => {
         const profile = await profiles.get(edge.blockedUserId);
         return {
           userId: edge.blockedUserId,
-          displayName: profile?.displayName?.trim() || 'Findr user',
+          displayName:
+            sanitizeDisplayNameForPublic(
+              profile?.displayName?.trim() || 'Findr user',
+            ) || 'Findr user',
           createdAt: edge.createdAt,
         };
       }),

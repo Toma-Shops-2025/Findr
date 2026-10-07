@@ -6,6 +6,7 @@ import { requireAuth } from '../modules/auth/requireAuth.js';
 import { getUserStore } from '../modules/auth/userStore.js';
 import { formatDistanceBand } from '../modules/geo/coarseLocation.js';
 import { getLocationStore } from '../modules/geo/locationStore.js';
+import { sanitizeDisplayNameForPublic } from '../modules/profiles/publicDisplay.js';
 import { getProfileStore } from '../modules/profiles/profileStore.js';
 import { getBlockStore } from '../modules/safety/blockStore.js';
 
@@ -37,7 +38,8 @@ export type NearbyCard = {
 };
 
 function fallbackDisplayName(email: string): string {
-  const local = email.split('@')[0] ?? 'Member';
+  let local = email.split('@')[0] ?? 'Member';
+  local = local.replace(/^sample[-_]?/i, '');
   const cleaned = local.replace(/[._+-]+/g, ' ').trim();
   if (!cleaned) return 'Member';
   return cleaned.replace(/\b\w/g, (c) => c.toUpperCase()).slice(0, 40);
@@ -145,11 +147,9 @@ export const geoRoutes: FastifyPluginAsync = async (app) => {
       // Age-gate-only accounts (no DOB) still appear; UI shows 18+ floor.
       const ageOut = age ?? 18;
 
-      const displayName =
-        (profile?.displayName?.trim() || fallbackDisplayName(user.email)).slice(
-          0,
-          40,
-        );
+      const rawName =
+        profile?.displayName?.trim() || fallbackDisplayName(user.email);
+      const displayName = sanitizeDisplayNameForPublic(rawName).slice(0, 40);
 
       const lastActive = profile?.lastActiveAt
         ? Date.parse(profile.lastActiveAt)

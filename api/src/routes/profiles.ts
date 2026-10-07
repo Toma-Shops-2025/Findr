@@ -5,6 +5,10 @@ import { yearsSince } from '../modules/auth/ageGate.js';
 import { requireAuth } from '../modules/auth/requireAuth.js';
 import { getUserStore } from '../modules/auth/userStore.js';
 import { isAllowedUploadUrl } from '../modules/media/storage.js';
+import {
+  sanitizeBioForPublic,
+  sanitizeDisplayNameForPublic,
+} from '../modules/profiles/publicDisplay.js';
 import { getProfileStore } from '../modules/profiles/profileStore.js';
 import type { LookingFor, ProfileRecord, PublicProfile } from '../modules/profiles/types.js';
 import { getBlockStore } from '../modules/safety/blockStore.js';
@@ -90,8 +94,8 @@ function toPublicProfile(
   }
   return {
     userId: record.userId,
-    displayName: record.displayName,
-    bio: record.bio,
+    displayName: sanitizeDisplayNameForPublic(record.displayName),
+    bio: sanitizeBioForPublic(record.bio),
     genderIdentity: record.genderIdentity,
     orientationsShown: record.orientationsShown,
     orientationsSeeking: record.orientationsSeeking,

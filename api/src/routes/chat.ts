@@ -10,6 +10,7 @@ import type {
   MessageWithLikes,
   PublicMessage,
 } from '../modules/chat/types.js';
+import { sanitizeDisplayNameForPublic } from '../modules/profiles/publicDisplay.js';
 import { getProfileStore } from '../modules/profiles/profileStore.js';
 import { getBlockStore } from '../modules/safety/blockStore.js';
 
@@ -27,7 +28,9 @@ function peerId(conversation: ConversationRecord, me: string): string {
 async function peerDisplayName(peerUserId: string): Promise<string> {
   const profiles = await getProfileStore();
   const profile = await profiles.get(peerUserId);
-  if (profile?.displayName?.trim()) return profile.displayName.trim();
+  if (profile?.displayName?.trim()) {
+    return sanitizeDisplayNameForPublic(profile.displayName);
+  }
   const users = await getUserStore();
   const user = await users.findById(peerUserId);
   return user?.email?.split('@')[0] ?? 'Findr user';

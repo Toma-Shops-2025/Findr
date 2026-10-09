@@ -17,7 +17,7 @@
     },
     "android": {
       "package": "app.findr.mobile",
-      "versionCode": 21,
+      "versionCode": 22,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
@@ -71,7 +71,8 @@
       "eas": {
         "projectId": "fca40da4-74a0-4eba-83e2-ef6155353a86"
       },
-      "apiUrl": "https://api.myfindr.fun"
+      "apiUrl": "https://api.myfindr.fun",
+      "googleWebClientId": ""
     },
     "newArchEnabled": false
   }

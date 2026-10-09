@@ -71,6 +71,8 @@ type AuthContextValue = {
   isLoading: boolean;
   signup: (input: SignupInput) => Promise<void>;
   login: (input: LoginInput) => Promise<void>;
+  loginWithGoogle: (idToken: string) => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -178,6 +180,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(data);
   }, []);
 
+  const loginWithGoogle = useCallback(async (idToken: string) => {
+    const data = await apiFetchLazy<AuthSession>('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({
+        idToken,
+        acceptedAgeGate: true,
+        tosAccepted: true,
+        privacyAccepted: true,
+      }),
+    });
+    await saveSession(data);
+    setSession(data);
+  }, []);
+
+  const requestPasswordReset = useCallback(async (email: string) => {
+    await apiFetchLazy('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email: email.trim() }),
+    });
+  }, []);
+
   const logout = useCallback(async () => {
     const token = session?.accessToken;
     try {
@@ -199,9 +222,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading: !ready,
       signup,
       login,
+      loginWithGoogle,
+      requestPasswordReset,
       logout,
     }),
-    [session, ready, signup, login, logout],
+    [session, ready, signup, login, loginWithGoogle, requestPasswordReset, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reset password — Findr</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="wrap doc">
+    <nav class="site-nav" aria-label="Primary">
+      <a class="brand" href="/">Findr</a>
+    </nav>
+    <h1>Reset password</h1>
+    <p>Choose a new password (8+ characters).</p>
+    <p><label>New password<br /><input id="pw" type="password" style="width:100%;max-width:360px;padding:10px;" /></label></p>
+    <p><button id="btn" type="button" style="padding:10px 16px;background:#FF6B4A;border:none;font-weight:600;">Update password</button></p>
+    <p id="msg"></p>
+  </div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const token = params.get('token');
+    const api = 'https://api.myfindr.fun';
+    document.getElementById('btn').onclick = async () => {
+      const password = document.getElementById('pw').value;
+      const msg = document.getElementById('msg');
+      if (!token) { msg.textContent = 'Missing reset token. Use the link from your email.'; return; }
+      const res = await fetch(api + '/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, password }),
+      });
+      if (res.ok) {
+        msg.textContent = 'Password updated. Open the Findr app and log in.';
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      msg.textContent = data.error === 'password_too_short' ? 'Use at least 8 characters.' : 'Link invalid or expired. Request a new reset from the app.';
+    };
+  </script>
+</body>
+</html>

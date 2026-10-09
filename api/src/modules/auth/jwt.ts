@@ -44,3 +44,26 @@ export function bearerToken(header: string | undefined): string | null {
   if (scheme?.toLowerCase() !== 'bearer' || !token) return null;
   return token;
 }
+
+export async function signAdminToken(email: string): Promise<string> {
+  return new SignJWT({ email, role: 'admin' })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject('admin')
+    .setIssuedAt()
+    .setExpirationTime('12h')
+    .sign(secretKey());
+}
+
+export async function verifyAdminToken(
+  token: string,
+): Promise<{ email: string } | null> {
+  try {
+    const { payload } = await jwtVerify(token, secretKey());
+    if (payload.role !== 'admin') return null;
+    const email = typeof payload.email === 'string' ? payload.email : null;
+    if (!email) return null;
+    return { email };
+  } catch {
+    return null;
+  }
+}

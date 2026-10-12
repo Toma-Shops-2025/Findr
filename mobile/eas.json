@@ -27,7 +27,8 @@
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.myfindr.fun",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "155868445533-ug5fg5r8c79cvc81h9gmdhe81fr0fol1.apps.googleusercontent.com"
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "155868445533-ug5fg5r8c79cvc81h9gmdhe81fr0fol1.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "155868445533-768bbg1kd7mrtuqlgd7kmbmdji79sr7m.apps.googleusercontent.com"
       }
     }
   },

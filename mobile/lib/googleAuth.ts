@@ -2,6 +2,7 @@ import type { AuthSessionResult } from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -24,19 +25,22 @@ export function useGoogleAuthRequest() {
     'EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID',
     'googleWebClientId',
   );
-  const androidClientId =
-    readClientId('EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID', 'googleAndroidClientId') ??
-    webClientId;
+  const androidOAuthClientId = readClientId(
+    'EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID',
+    'googleAndroidClientId',
+  );
   const [request, response, promptAsync] = Google.useAuthRequest({
     webClientId,
-    androidClientId,
+    // Never pass the Web client ID as androidClientId (causes custom-scheme error).
+    androidClientId:
+      Platform.OS === 'android'
+        ? androidOAuthClientId
+        : androidOAuthClientId ?? webClientId,
   });
-  return {
-    request,
-    response,
-    promptAsync,
-    configured: Boolean(webClientId && androidClientId),
-  };
+  const configured =
+    Boolean(webClientId) &&
+    (Platform.OS !== 'android' || Boolean(androidOAuthClientId));
+  return { request, response, promptAsync, configured };
 }
 
 export function idTokenFromGoogleResponse(

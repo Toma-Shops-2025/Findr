@@ -2,7 +2,21 @@ import { randomUUID } from 'node:crypto';
 import type pg from 'pg';
 
 import { getPool } from '../db.js';
+import {
+  ALBUM_MAX_PHOTOS,
+  ALBUM_MAX_VIDEOS,
+  type AlbumCounts,
+} from './limits.js';
 import type { MediaType, UploadKind } from './storage.js';
+
+export class AlbumCapacityError extends Error {
+  readonly code: 'album_photo_limit' | 'album_video_limit';
+
+  constructor(code: 'album_photo_limit' | 'album_video_limit') {
+    super(code);
+    this.code = code;
+  }
+}
 
 export type AlbumSource = 'upload' | 'chat' | 'camera' | 'profile' | 'album';
 
@@ -62,8 +76,28 @@ function sourceFromKind(kind: UploadKind, explicit?: AlbumSource): AlbumSource {
   return 'chat';
 }
 
+function assertAlbumCapacity(counts: AlbumCounts, mediaType: MediaType): void {
+  if (mediaType === 'video' && counts.videos >= ALBUM_MAX_VIDEOS) {
+    throw new AlbumCapacityError('album_video_limit');
+  }
+  if (mediaType === 'photo' && counts.photos >= ALBUM_MAX_PHOTOS) {
+    throw new AlbumCapacityError('album_photo_limit');
+  }
+}
+
 class MemoryAlbumStore {
   private byId = new Map<string, UserMediaRecord>();
+
+  async countForUser(userId: string): Promise<AlbumCounts> {
+    let photos = 0;
+    let videos = 0;
+    for (const m of this.byId.values()) {
+      if (m.userId !== userId) continue;
+      if (m.mediaType === 'video') videos += 1;
+      else photos += 1;
+    }
+    return { photos, videos };
+  }
 
   async listForUser(userId: string, limit = 100): Promise<UserMediaRecord[]> {
     const capped = Math.max(1, Math.min(limit, 200));
@@ -74,6 +108,8 @@ class MemoryAlbumStore {
   }
 
   async add(input: AddUserMediaInput): Promise<UserMediaRecord> {
+    const counts = await this.countForUser(input.userId);
+    assertAlbumCapacity(counts, input.mediaType);
     const record: UserMediaRecord = {
       id: randomUUID(),
       userId: input.userId,
@@ -95,10 +131,41 @@ class MemoryAlbumStore {
     this.byId.delete(id);
     return true;
   }
+
+  /** Drop oldest album row of this type (chat stash rotation). */
+  async deleteOldestForUser(
+    userId: string,
+    mediaType: MediaType,
+  ): Promise<boolean> {
+    const rows = [...this.byId.values()]
+      .filter((m) => m.userId === userId && m.mediaType === mediaType)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const oldest = rows[0];
+    if (!oldest) return false;
+    this.byId.delete(oldest.id);
+    return true;
+  }
 }
 
 class PostgresAlbumStore {
   constructor(private pool: pg.Pool) {}
+
+  async countForUser(userId: string): Promise<AlbumCounts> {
+    const result = await this.pool.query(
+      `SELECT media_type, COUNT(*)::int AS n
+       FROM user_media
+       WHERE user_id = $1
+       GROUP BY media_type`,
+      [userId],
+    );
+    let photos = 0;
+    let videos = 0;
+    for (const row of result.rows) {
+      if (row.media_type === 'video') videos = Number(row.n);
+      else photos = Number(row.n);
+    }
+    return { photos, videos };
+  }
 
   async listForUser(userId: string, limit = 100): Promise<UserMediaRecord[]> {
     const capped = Math.max(1, Math.min(limit, 200));
@@ -114,6 +181,8 @@ class PostgresAlbumStore {
   }
 
   async add(input: AddUserMediaInput): Promise<UserMediaRecord> {
+    const counts = await this.countForUser(input.userId);
+    assertAlbumCapacity(counts, input.mediaType);
     const result = await this.pool.query(
       `INSERT INTO user_media (user_id, media_type, url, mime, bytes, duration_ms, source)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -135,6 +204,24 @@ class PostgresAlbumStore {
     const result = await this.pool.query(
       `DELETE FROM user_media WHERE id = $1 AND user_id = $2`,
       [id, userId],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async deleteOldestForUser(
+    userId: string,
+    mediaType: MediaType,
+  ): Promise<boolean> {
+    const result = await this.pool.query(
+      `DELETE FROM user_media
+       WHERE id = (
+         SELECT id FROM user_media
+         WHERE user_id = $1 AND media_type = $2
+         ORDER BY created_at ASC
+         LIMIT 1
+       )
+       RETURNING id`,
+      [userId, mediaType],
     );
     return (result.rowCount ?? 0) > 0;
   }

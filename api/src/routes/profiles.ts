@@ -32,7 +32,7 @@ const updateSchema = z
     // http(s), local /uploads/..., or stub:photo-N placeholders.
     photoUrls: z
       .array(z.string().max(500))
-      .max(6)
+      .max(5)
       .optional()
       .refine((urls) => !urls || urls.every((u) => isAllowedUploadUrl(u)), {
         message: 'photoUrls must be http(s), /uploads/..., or stub:...',

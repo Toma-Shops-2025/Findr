@@ -115,10 +115,17 @@ export default function FindrCameraScreen() {
 
       router.back();
     } catch (err) {
-      Alert.alert(
-        'Upload failed',
-        err instanceof Error ? err.message : 'Could not save to Findr',
-      );
+      const code = (err as Error & { code?: string }).code;
+      let message = err instanceof Error ? err.message : 'Could not save to Findr';
+      if (code === 'album_video_limit') {
+        message =
+          'Your Findr album already has a video. Delete it in Album before recording another.';
+      } else if (code === 'album_photo_limit') {
+        message = 'Your Findr album is full (10 photos). Delete one first.';
+      } else if (code === 'video_camera_only') {
+        message = 'Videos must be recorded in the Findr camera.';
+      }
+      Alert.alert('Upload failed', message);
     } finally {
       setBusy(false);
     }
@@ -387,7 +394,7 @@ const styles = StyleSheet.create({
   },
   disabled: { opacity: 0.5 },
   busyOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     justifyContent: 'center',

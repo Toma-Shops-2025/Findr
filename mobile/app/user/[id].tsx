@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,7 +13,7 @@ import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router
 import { colors, radii, spacing, typography } from '@/constants/theme';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { primaryPhotoUrl } from '@/lib/mediaUrl';
+import { ProfilePhotoGallery } from '@/components/ProfilePhotoGallery';
 import type { PublicProfile } from '@/lib/types';
 
 /** Peer profile opened from Nearby - loads GET /profiles/:userId. */
@@ -51,13 +50,6 @@ export default function PeerProfileScreen() {
     }, [load]),
   );
 
-  const photoUri = primaryPhotoUrl(profile?.photoUrls);
-  const [photoFailed, setPhotoFailed] = useState(false);
-
-  useEffect(() => {
-    setPhotoFailed(false);
-  }, [photoUri]);
-
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -85,21 +77,10 @@ export default function PeerProfileScreen() {
         </View>
       ) : (
         <>
-          <View style={styles.photo}>
-            {photoUri && !photoFailed ? (
-              <Image
-                source={{ uri: photoUri }}
-                style={styles.photoImage}
-                resizeMode="cover"
-                onError={() => setPhotoFailed(true)}
-                accessibilityIgnoresInvertColors
-              />
-            ) : (
-              <Text style={styles.initial}>
-                {(name[0] || '?').toUpperCase()}
-              </Text>
-            )}
-          </View>
+          <ProfilePhotoGallery
+            photoUrls={profile.photoUrls ?? []}
+            displayName={name}
+          />
           <Text style={styles.name}>
             {name}, {profile.age}
           </Text>

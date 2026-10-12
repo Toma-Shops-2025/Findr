@@ -4,10 +4,16 @@ import { z } from 'zod';
 
 import { requireAuth } from '../modules/auth/requireAuth.js';
 import {
+  AlbumCapacityError,
   getAlbumStore,
   sourceFromKind,
   type AlbumSource,
 } from '../modules/media/albumStore.js';
+import {
+  ALBUM_MAX_PHOTOS,
+  ALBUM_MAX_VIDEOS,
+} from '../modules/media/limits.js';
+import type { MediaType } from '../modules/media/storage.js';
 import {
   PHOTO_MAX_BYTES,
   VIDEO_MAX_BYTES,
@@ -21,6 +27,23 @@ import { getProfileStore } from '../modules/profiles/profileStore.js';
 
 const kindSchema = z.enum(['profile', 'chat', 'album']);
 const sourceSchema = z.enum(['upload', 'chat', 'camera', 'profile', 'album']);
+
+type AlbumStoreLike = Awaited<ReturnType<typeof getAlbumStore>>;
+
+/** Chat sends always land in Findr album; rotate oldest when at cap. */
+async function makeAlbumRoomForChat(
+  album: AlbumStoreLike,
+  userId: string,
+  mediaType: MediaType,
+): Promise<void> {
+  const counts = await album.countForUser(userId);
+  if (mediaType === 'video' && counts.videos >= ALBUM_MAX_VIDEOS) {
+    await album.deleteOldestForUser(userId, 'video');
+  }
+  if (mediaType === 'photo' && counts.photos >= ALBUM_MAX_PHOTOS) {
+    await album.deleteOldestForUser(userId, 'photo');
+  }
+}
 
 /**
  * JWT-protected image/video uploads -> local api/uploads/.
@@ -106,6 +129,19 @@ export const mediaRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
+    if (mediaType === 'video') {
+      const effectiveSource =
+        source ?? (kind === 'chat' ? 'chat' : kind === 'album' ? 'album' : 'upload');
+      if (effectiveSource !== 'camera') {
+        data.file.resume();
+        return reply.code(400).send({
+          error: 'video_camera_only',
+          message:
+            'Videos must be recorded in the Findr in-app camera (30 second max).',
+        });
+      }
+    }
+
     try {
       const saved = await saveUploadStream({
         kind,
@@ -122,15 +158,35 @@ export const mediaRoutes: FastifyPluginAsync = async (app) => {
       // Always save chat/album/camera captures into the personal Findr album.
       // Profile photos also land in album for reuse.
       const album = await getAlbumStore();
-      const albumItem = await album.add({
-        userId: auth.userId,
-        mediaType: saved.mediaType,
-        url: saved.relativeUrl,
-        mime: data.mimetype ?? null,
-        bytes: saved.bytes,
-        durationMs,
-        source: sourceFromKind(kind, source ?? (kind === 'chat' ? 'chat' : undefined)),
-      });
+      if (kind === 'chat') {
+        await makeAlbumRoomForChat(album, auth.userId, saved.mediaType);
+      }
+      let albumItem;
+      try {
+        albumItem = await album.add({
+          userId: auth.userId,
+          mediaType: saved.mediaType,
+          url: saved.relativeUrl,
+          mime: data.mimetype ?? null,
+          bytes: saved.bytes,
+          durationMs,
+          source: sourceFromKind(
+            kind,
+            source ?? (kind === 'chat' ? 'chat' : undefined),
+          ),
+        });
+      } catch (err) {
+        if (err instanceof AlbumCapacityError) {
+          return reply.code(409).send({
+            error: err.code,
+            message:
+              err.code === 'album_video_limit'
+                ? `Findr album allows ${1} video. Delete it to add another.`
+                : `Findr album allows ${ALBUM_MAX_PHOTOS} photos. Delete one to add another.`,
+          });
+        }
+        throw err;
+      }
 
       if (kind === 'profile' && saved.mediaType === 'photo') {
         const store = await getProfileStore();
@@ -154,7 +210,7 @@ export const mediaRoutes: FastifyPluginAsync = async (app) => {
           age?: number | null;
         } = {
           displayName,
-          photoUrls: [saved.relativeUrl, ...rest].slice(0, 6),
+          photoUrls: [saved.relativeUrl, ...rest].slice(0, 5),
         };
         if (existing?.bio !== undefined) update.bio = existing.bio;
         if (existing?.genderIdentity !== undefined) {

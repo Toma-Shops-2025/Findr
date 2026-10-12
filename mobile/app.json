@@ -16,7 +16,7 @@
     },
     "android": {
       "package": "app.findr.mobile",
-      "versionCode": 28,
+      "versionCode": 29,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
@@ -90,7 +90,8 @@
         "projectId": "fca40da4-74a0-4eba-83e2-ef6155353a86"
       },
       "apiUrl": "https://api.myfindr.fun",
-      "googleWebClientId": "155868445533-ug5fg5r8c79cvc81h9gmdhe81fr0fol1.apps.googleusercontent.com"
+      "googleWebClientId": "155868445533-ug5fg5r8c79cvc81h9gmdhe81fr0fol1.apps.googleusercontent.com",
+      "googleAndroidClientId": "155868445533-768bbg1kd7mrtuqlgd7kmbmdji79sr7m.apps.googleusercontent.com"
     }
   }
 }

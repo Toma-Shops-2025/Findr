@@ -15,7 +15,7 @@ import {
 import { Stack, router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import { Video, ResizeMode } from 'expo-av';
+import { useVideoPlayer, VideoView } from 'expo-video';
 
 import { colors, radii, spacing, typography } from '@/constants/theme';
 import {
@@ -35,7 +35,7 @@ const CHAT_AD_RESERVED_DP = 56;
 /**
  * Stage 2d chat thread: text + photo attach + double-tap likes + album entry.
  * Composer sits above a named ad-reserved band (no ad SDK yet).
- * Stage 2e: gallery photo; video only via in-app camera (30s). Playback via expo-av.
+ * Stage 2e: gallery photo; video only via in-app camera (30s). Playback via expo-video.
  */
 export default function ChatThreadScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -357,13 +357,7 @@ export default function ChatThreadScreen() {
                 />
               ) : null}
               {videoUri ? (
-                <Video
-                  source={{ uri: videoUri }}
-                  style={styles.bubbleVideo}
-                  useNativeControls
-                  resizeMode={ResizeMode.COVER}
-                  isLooping={false}
-                />
+                <ChatBubbleVideo uri={videoUri} style={styles.bubbleVideo} />
               ) : null}
               {item.location ? (
                 <Text
@@ -441,6 +435,26 @@ export default function ChatThreadScreen() {
         <View style={styles.adReservedInner} />
       </View>
     </KeyboardAvoidingView>
+  );
+}
+
+function ChatBubbleVideo({
+  uri,
+  style,
+}: {
+  uri: string;
+  style: object;
+}) {
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = false;
+  });
+  return (
+    <VideoView
+      player={player}
+      style={style}
+      nativeControls
+      contentFit="cover"
+    />
   );
 }
 

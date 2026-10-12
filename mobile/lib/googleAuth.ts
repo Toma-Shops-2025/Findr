@@ -5,22 +5,38 @@ import Constants from 'expo-constants';
 
 WebBrowser.maybeCompleteAuthSession();
 
-function webClientId(): string | undefined {
-  const extra = Constants.expoConfig?.extra as { googleWebClientId?: string } | undefined;
-  return (
-    extra?.googleWebClientId ??
-    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ??
-    undefined
-  );
+function readClientId(
+  envKey: 'EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID' | 'EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID',
+  extraKey: 'googleWebClientId' | 'googleAndroidClientId',
+): string | undefined {
+  const extra = Constants.expoConfig?.extra as
+    | { googleWebClientId?: string; googleAndroidClientId?: string }
+    | undefined;
+  const fromExtra =
+    extraKey === 'googleWebClientId'
+      ? extra?.googleWebClientId
+      : extra?.googleAndroidClientId;
+  return fromExtra ?? process.env[envKey] ?? undefined;
 }
 
 export function useGoogleAuthRequest() {
-  const clientId = webClientId();
+  const webClientId = readClientId(
+    'EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID',
+    'googleWebClientId',
+  );
+  const androidClientId =
+    readClientId('EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID', 'googleAndroidClientId') ??
+    webClientId;
   const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: clientId,
-    androidClientId: clientId,
+    webClientId,
+    androidClientId,
   });
-  return { request, response, promptAsync, configured: Boolean(clientId) };
+  return {
+    request,
+    response,
+    promptAsync,
+    configured: Boolean(webClientId && androidClientId),
+  };
 }
 
 export function idTokenFromGoogleResponse(

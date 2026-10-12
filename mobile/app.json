@@ -16,12 +16,14 @@
     },
     "android": {
       "package": "app.findr.mobile",
-      "versionCode": 27,
+      "versionCode": 28,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "READ_MEDIA_IMAGES",
-        "READ_EXTERNAL_STORAGE"
+        "READ_EXTERNAL_STORAGE",
+        "CAMERA",
+        "RECORD_AUDIO"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#12151C",
@@ -69,6 +71,14 @@
         "expo-image-picker",
         {
           "photosPermission": "Findr uses your photo library so you can set a profile picture. Photos upload to Findr only and are not saved back to your gallery."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Findr uses an in-app camera for photos and short videos (max 30 seconds). Media stays in Findr only — not your phone gallery.",
+          "microphonePermission": "Findr uses the microphone for short in-app videos (max 30 seconds). Nothing is saved to your phone gallery.",
+          "recordAudioAndroid": true
         }
       ]
     ],

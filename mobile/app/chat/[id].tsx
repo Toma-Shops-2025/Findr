@@ -35,7 +35,7 @@ const CHAT_AD_RESERVED_DP = 56;
 /**
  * Stage 2d chat thread: text + photo attach + double-tap likes + album entry.
  * Composer sits above a named ad-reserved band (no ad SDK yet).
- * Stage 2e: gallery photo + short video (30s). Playback via expo-av.
+ * Stage 2e: gallery photo; video only via in-app camera (30s). Playback via expo-av.
  */
 export default function ChatThreadScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -259,39 +259,45 @@ export default function ChatThreadScreen() {
     }
   };
 
-  const onPickGallery = async (mediaType: 'photo' | 'video') => {
+  const onPickPhoto = async () => {
     if (!accessToken || !id || sending) return;
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Alert.alert(
         'Library access needed',
-        'Allow Findr to pick media to send. It is uploaded to Findr only -- not saved back to your phone gallery.',
+        'Allow Findr to pick a photo to send. It is uploaded to Findr only — not saved to your phone gallery.',
       );
       return;
     }
     const picked = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: mediaType === 'video' ? ['videos'] : ['images'],
+      mediaTypes: ['images'],
       quality: 0.8,
       allowsEditing: false,
-      videoMaxDuration: VIDEO_MAX_DURATION_SEC,
     });
     if (picked.canceled || !picked.assets?.[0]?.uri) return;
     const asset = picked.assets[0];
-    const durationMs =
-      mediaType === 'video' ? videoDurationMs(asset.duration) : null;
     await uploadAndSendMedia(
       asset.uri,
-      mediaType,
-      asset.fileName ?? (mediaType === 'video' ? 'chat.mp4' : 'chat.jpg'),
-      durationMs,
+      'photo',
+      asset.fileName ?? 'chat.jpg',
+    );
+  };
+
+  const openRecordVideo = () => {
+    if (!id || sending) return;
+    router.push(
+      `/camera?mode=video&conversationId=${encodeURIComponent(id)}`,
     );
   };
 
   const openAttachMenu = () => {
     if (!id || sending) return;
-    Alert.alert('Attach', 'Stays in Findr only — not your phone gallery.', [
-      { text: 'Photo', onPress: () => void onPickGallery('photo') },
-      { text: `Video (max ${VIDEO_MAX_DURATION_SEC}s)`, onPress: () => void onPickGallery('video') },
+    Alert.alert('Attach', 'Photos from gallery. Videos only via Findr camera (30s).', [
+      { text: 'Photo from gallery', onPress: () => void onPickPhoto() },
+      {
+        text: `Record video (${VIDEO_MAX_DURATION_SEC}s max)`,
+        onPress: openRecordVideo,
+      },
       { text: 'Cancel', style: 'cancel' },
     ]);
   };
@@ -438,13 +444,6 @@ export default function ChatThreadScreen() {
       </View>
     </KeyboardAvoidingView>
   );
-}
-
-/** ImagePicker: seconds on Android, ms on iOS. */
-function videoDurationMs(duration: number | undefined | null): number | null {
-  if (duration == null || !Number.isFinite(duration)) return null;
-  if (duration <= 120) return Math.round(duration * 1000);
-  return Math.round(duration);
 }
 
 function normalizeMessage(m: PublicMessage): PublicMessage {

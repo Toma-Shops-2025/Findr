@@ -108,6 +108,19 @@ export const mediaRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
+    if (mediaType === 'video') {
+      const effectiveSource =
+        source ?? (kind === 'chat' ? 'chat' : kind === 'album' ? 'album' : 'upload');
+      if (effectiveSource !== 'camera') {
+        data.file.resume();
+        return reply.code(400).send({
+          error: 'video_camera_only',
+          message:
+            'Videos must be recorded in the Findr in-app camera (30 second max).',
+        });
+      }
+    }
+
     try {
       const saved = await saveUploadStream({
         kind,

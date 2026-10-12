@@ -122,19 +122,12 @@ export default function AlbumScreen() {
     ]);
   };
 
-  const addFromPicker = async (mediaType: 'photo' | 'video') => {
+  const addPhotoFromPicker = async () => {
     if (!accessToken || busy) return;
-    if (mediaType === 'photo' && counts.photos >= ALBUM_MAX_PHOTOS) {
+    if (counts.photos >= ALBUM_MAX_PHOTOS) {
       Alert.alert(
         'Album full',
         `You can store up to ${ALBUM_MAX_PHOTOS} photos. Long-press one to remove.`,
-      );
-      return;
-    }
-    if (mediaType === 'video' && counts.videos >= ALBUM_MAX_VIDEOS) {
-      Alert.alert(
-        'Video limit',
-        `You can store ${ALBUM_MAX_VIDEOS} video in Findr. Remove it to add another.`,
       );
       return;
     }
@@ -147,30 +140,20 @@ export default function AlbumScreen() {
       return;
     }
     const picked = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: mediaType === 'video' ? ['videos'] : ['images'],
+      mediaTypes: ['images'],
       quality: 0.8,
       allowsEditing: false,
-      videoMaxDuration: VIDEO_MAX_DURATION_SEC,
     });
     if (picked.canceled || !picked.assets?.[0]?.uri) return;
     const asset = picked.assets[0];
     setBusy(true);
     try {
-      const duration =
-        mediaType === 'video' && asset.duration != null
-          ? asset.duration <= 120
-            ? Math.round(asset.duration * 1000)
-            : Math.round(asset.duration)
-          : null;
       await apiUploadMedia(asset.uri, {
         token: accessToken,
         kind: 'album',
-        mediaType,
+        mediaType: 'photo',
         source: 'album',
-        fileName:
-          asset.fileName ??
-          (mediaType === 'video' ? 'album.mp4' : 'album.jpg'),
-        durationMs: duration,
+        fileName: asset.fileName ?? 'album.jpg',
       });
       await load();
     } catch (err) {
@@ -187,12 +170,23 @@ export default function AlbumScreen() {
     }
   };
 
+  const openRecordVideo = () => {
+    if (counts.videos >= ALBUM_MAX_VIDEOS) {
+      Alert.alert(
+        'Video limit',
+        `You can store ${ALBUM_MAX_VIDEOS} video in Findr. Remove it to record another.`,
+      );
+      return;
+    }
+    router.push('/camera?mode=video');
+  };
+
   const openAddMenu = () => {
-    Alert.alert('Add to Findr album', 'Not saved to your phone gallery.', [
-      { text: 'Photo', onPress: () => void addFromPicker('photo') },
+    Alert.alert('Add to Findr album', 'Videos must be recorded in Findr (30s).', [
+      { text: 'Photo from gallery', onPress: () => void addPhotoFromPicker() },
       {
-        text: `Video (${VIDEO_MAX_DURATION_SEC}s max)`,
-        onPress: () => void addFromPicker('video'),
+        text: `Record video (${VIDEO_MAX_DURATION_SEC}s max)`,
+        onPress: openRecordVideo,
       },
       { text: 'Cancel', style: 'cancel' },
     ]);
@@ -207,7 +201,7 @@ export default function AlbumScreen() {
       />
       <Text style={styles.privacy}>
         Stays in Findr only — not your phone gallery. Up to {ALBUM_MAX_PHOTOS}{' '}
-        photos and {ALBUM_MAX_VIDEOS} video ({VIDEO_MAX_DURATION_SEC}s max).
+        photos and {ALBUM_MAX_VIDEOS} in-app video ({VIDEO_MAX_DURATION_SEC}s max).
       </Text>
       <Text style={styles.counts}>
         {counts.photos}/{ALBUM_MAX_PHOTOS} photos · {counts.videos}/

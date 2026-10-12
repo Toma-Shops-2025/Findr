@@ -27,13 +27,20 @@ export async function apiFetch<T>(
   path: string,
   options: RequestInit & { token?: string | null } = {},
 ): Promise<T> {
-  const { token, headers, ...rest } = options;
+  const { token, headers, body, ...rest } = options;
+  const hdrs: Record<string, string> = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+  // Fastify rejects DELETE/GET with application/json and an empty body.
+  if (body !== undefined && body !== null && body !== '') {
+    hdrs['Content-Type'] = 'application/json';
+  }
   const res = await fetch(`${getApiBaseUrl()}${path}`, {
     ...rest,
+    body,
     headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
+      ...hdrs,
+      ...(headers as Record<string, string> | undefined),
     },
   });
 

@@ -1,8 +1,12 @@
-import { createWriteStream, existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { pipeline } from 'node:stream/promises';
 import type { Readable } from 'node:stream';
+
+import {
+  getObjectStorageConfig,
+  uploadPublicObject,
+} from './objectStorage.js';
 
 /** Local disk root for MVP uploads. Play Store should switch to S3/CDN later. */
 export const UPLOADS_DIR = join(process.cwd(), 'uploads');
@@ -61,11 +65,42 @@ function safeExt(
 }
 
 export type SavedUpload = {
+  /** Public URL (absolute https or /uploads/...). */
   relativeUrl: string;
   absolutePath: string;
   bytes: number;
   mediaType: MediaType;
 };
+
+async function streamToBuffer(
+  stream: Readable,
+  maxBytes: number,
+): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  for await (const chunk of stream) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    bytes += buf.length;
+    if (bytes > maxBytes) {
+      throw Object.assign(new Error('file_too_large'), { code: 'file_too_large' });
+    }
+    chunks.push(buf);
+  }
+  return Buffer.concat(chunks);
+}
+
+function contentTypeFor(
+  mediaType: MediaType,
+  mimetype: string | undefined,
+  ext: string,
+): string {
+  if (mimetype) return mimetype;
+  if (ext === '.png') return 'image/png';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.gif') return 'image/gif';
+  if (mediaType === 'video') return 'video/mp4';
+  return 'image/jpeg';
+}
 
 export async function saveUploadStream(opts: {
   kind: UploadKind;
@@ -88,22 +123,35 @@ export async function saveUploadStream(opts: {
           : 'chat';
   const name = `${randomUUID()}${ext}`;
   const absolutePath = join(UPLOADS_DIR, sub, name);
-  const relativeUrl = `/uploads/${sub}/${name}`;
+  const localUrl = `/uploads/${sub}/${name}`;
 
-  let bytes = 0;
-  opts.stream.on('data', (chunk: Buffer | string) => {
-    bytes += typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.length;
-    if (bytes > maxBytes) {
-      opts.stream.destroy(new Error('file_too_large'));
-    }
-  });
+  const body = await streamToBuffer(opts.stream, maxBytes);
+  const bytes = body.length;
+  const contentType = contentTypeFor(opts.mediaType, opts.mimetype, ext);
 
-  await pipeline(opts.stream, createWriteStream(absolutePath));
-  if (bytes > maxBytes) {
-    throw Object.assign(new Error('file_too_large'), { code: 'file_too_large' });
+  if (getObjectStorageConfig()) {
+    const key = `findr/${sub}/${name}`;
+    const publicUrl = await uploadPublicObject({
+      key,
+      body,
+      contentType,
+    });
+    return {
+      relativeUrl: publicUrl,
+      absolutePath,
+      bytes,
+      mediaType: opts.mediaType,
+    };
   }
 
-  return { relativeUrl, absolutePath, bytes, mediaType: opts.mediaType };
+  ensureUploadsDir();
+  writeFileSync(absolutePath, body);
+  return {
+    relativeUrl: localUrl,
+    absolutePath,
+    bytes,
+    mediaType: opts.mediaType,
+  };
 }
 
 export function isAllowedUploadUrl(url: string): boolean {

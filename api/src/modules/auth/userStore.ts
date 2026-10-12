@@ -7,6 +7,7 @@ import { isAdult, normalizeEmail } from './ageGate.js';
 export type UserRecord = {
   id: string;
   email: string;
+  /** Empty when account is Google-only. */
   passwordHash: string;
   /** Null when user attested 18+ without submitting DOB (MVP). */
   dateOfBirth: string | null;
@@ -51,7 +52,7 @@ function rowToUser(row: Record<string, unknown>): UserRecord {
   return {
     id: String(row.id),
     email: String(row.email),
-    passwordHash: String(row.password_hash),
+    passwordHash: row.password_hash == null ? '' : String(row.password_hash),
     dateOfBirth:
       row.date_of_birth == null ? null : String(row.date_of_birth),
     tosAcceptedAt: isoOrNull(row.tos_accepted_at),
@@ -90,6 +91,7 @@ function assertSignupGate(input: SignupInput): void {
 class MemoryUserStore {
   private usersByEmail = new Map<string, UserRecord>();
   private usersById = new Map<string, UserRecord>();
+  private authSubjects = new Map<string, string>();
 
   async create(input: SignupInput): Promise<PublicUser> {
     const email = normalizeEmail(input.email);
@@ -111,6 +113,7 @@ class MemoryUserStore {
     };
     this.usersByEmail.set(email, user);
     this.usersById.set(user.id, user);
+    this.authSubjects.set(`email:${email}`, user.id);
     return toPublic(user);
   }
 
@@ -133,6 +136,53 @@ class MemoryUserStore {
     if (!user) return false;
     this.usersById.delete(userId);
     this.usersByEmail.delete(normalizeEmail(user.email));
+    return true;
+  }
+
+  async findByAuthSubject(subject: string): Promise<UserRecord | null> {
+    const id = this.authSubjects.get(subject);
+    if (!id) return null;
+    return this.usersById.get(id) ?? null;
+  }
+
+  async upsertGoogleUser(input: {
+    googleSub: string;
+    email: string;
+    acceptedAgeGate: true;
+    tosAccepted: true;
+    privacyAccepted: true;
+  }): Promise<PublicUser> {
+    const email = normalizeEmail(input.email);
+    const subject = `google:${input.googleSub}`;
+    const existingSubject = await this.findByAuthSubject(subject);
+    if (existingSubject) {
+      return toPublic(existingSubject);
+    }
+    const byEmail = await this.findByEmail(email);
+    if (byEmail) {
+      throw Object.assign(new Error('email_taken'), { code: 'email_taken' });
+    }
+    const now = new Date().toISOString();
+    const user: UserRecord = {
+      id: crypto.randomUUID(),
+      email,
+      passwordHash: '',
+      dateOfBirth: null,
+      tosAcceptedAt: now,
+      privacyAcceptedAt: now,
+      ageGateAcceptedAt: now,
+      createdAt: now,
+    };
+    this.usersByEmail.set(email, user);
+    this.usersById.set(user.id, user);
+    this.authSubjects.set(subject, user.id);
+    return toPublic(user);
+  }
+
+  async setPassword(userId: string, password: string): Promise<boolean> {
+    const user = this.usersById.get(userId);
+    if (!user) return false;
+    user.passwordHash = await bcrypt.hash(password, 10);
     return true;
   }
 }
@@ -235,6 +285,70 @@ class PostgresUserStore {
    * Soft-delete + anonymize so the email can be reused and JWT /me fails.
    * Related profile/location cleanup is handled by the auth delete route.
    */
+  async findByAuthSubject(subject: string): Promise<UserRecord | null> {
+    const result = await this.pool.query(
+      `SELECT id, email, password_hash, date_of_birth::text AS date_of_birth,
+              tos_accepted_at, privacy_accepted_at,
+              age_gate_accepted_at, created_at
+       FROM users
+       WHERE auth_subject = $1 AND deleted_at IS NULL
+       LIMIT 1`,
+      [subject],
+    );
+    const row = result.rows[0];
+    return row ? rowToUser(row) : null;
+  }
+
+  async upsertGoogleUser(input: {
+    googleSub: string;
+    email: string;
+    acceptedAgeGate: true;
+    tosAccepted: true;
+    privacyAccepted: true;
+  }): Promise<PublicUser> {
+    const email = normalizeEmail(input.email);
+    const subject = `google:${input.googleSub}`;
+    const existing = await this.findByAuthSubject(subject);
+    if (existing) {
+      return toPublic(existing);
+    }
+    const byEmail = await this.findByEmail(email);
+    if (byEmail) {
+      throw Object.assign(new Error('email_taken'), { code: 'email_taken' });
+    }
+
+    const result = await this.pool.query(
+      `INSERT INTO users (
+         auth_subject, email, password_hash, date_of_birth,
+         tos_accepted_at, privacy_accepted_at, age_gate_accepted_at
+       ) VALUES ($1, $2, NULL, NULL, now(), now(), now())
+       RETURNING id, email, date_of_birth::text AS date_of_birth,
+                 tos_accepted_at, privacy_accepted_at, age_gate_accepted_at,
+                 created_at`,
+      [subject, email],
+    );
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      email: row.email,
+      dateOfBirth: row.date_of_birth == null ? null : row.date_of_birth,
+      tosAcceptedAt: isoOrNull(row.tos_accepted_at),
+      privacyAcceptedAt: isoOrNull(row.privacy_accepted_at),
+      ageGateAcceptedAt: isoOrNull(row.age_gate_accepted_at),
+      createdAt: isoOrNull(row.created_at) ?? new Date().toISOString(),
+    };
+  }
+
+  async setPassword(userId: string, password: string): Promise<boolean> {
+    const passwordHash = await bcrypt.hash(password, 10);
+    const result = await this.pool.query(
+      `UPDATE users SET password_hash = $2, updated_at = now()
+       WHERE id = $1 AND deleted_at IS NULL`,
+      [userId, passwordHash],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
   async softDelete(userId: string): Promise<boolean> {
     const tombstoneEmail = `deleted+${userId}@deleted.invalid`;
     const tombstoneSubject = `deleted:${userId}`;
@@ -272,6 +386,9 @@ export async function verifyPassword(
   user: UserRecord,
   password: string,
 ): Promise<boolean> {
+  if (!user.passwordHash) {
+    return false;
+  }
   return bcrypt.compare(password, user.passwordHash);
 }
 

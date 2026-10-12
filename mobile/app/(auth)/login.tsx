@@ -11,16 +11,19 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PasswordField } from '@/components/PasswordField';
+import { GoogleSignInButton } from '@/components/GoogleSignInButton';
 import { colors, radii, spacing, typography } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
 
 export default function LoginScreen() {
-  const { login } = useAuth();
+  const { login, loginWithGoogle, requestPasswordReset } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [staySignedIn, setStaySignedIn] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
 
   const onLogin = async () => {
     setError(null);
@@ -80,6 +83,30 @@ export default function LoginScreen() {
           <Text style={styles.checkText}>Stay signed in</Text>
         </Pressable>
 
+        <Pressable
+          onPress={async () => {
+            if (!email.trim()) {
+              setError('Enter your email first, then tap Forgot password.');
+              return;
+            }
+            setResetBusy(true);
+            setError(null);
+            try {
+              await requestPasswordReset(email.trim());
+              setResetSent(true);
+            } catch {
+              setError('Could not send reset email. Try again later.');
+            } finally {
+              setResetBusy(false);
+            }
+          }}
+          disabled={resetBusy}
+        >
+          <Text style={styles.forgot}>
+            {resetSent ? 'Reset email sent (check inbox)' : 'Forgot password?'}
+          </Text>
+        </Pressable>
+
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Pressable
@@ -93,6 +120,13 @@ export default function LoginScreen() {
             <Text style={styles.ctaText}>Log in</Text>
           )}
         </Pressable>
+
+        <GoogleSignInButton
+          onIdToken={async (token) => {
+            await loginWithGoogle(token);
+            router.replace('/(tabs)/nearby');
+          }}
+        />
 
         <Link href="/(auth)/onboarding" style={styles.link}>
           New here? Create an account
@@ -211,5 +245,11 @@ const styles = StyleSheet.create({
     color: colors.mist,
     fontSize: 15,
     lineHeight: 22,
+  },
+  forgot: {
+    fontFamily: typography.bodyMedium,
+    color: colors.teal,
+    fontSize: 14,
+    marginTop: spacing.xs,
   },
 });

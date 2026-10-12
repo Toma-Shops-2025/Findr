@@ -6,6 +6,11 @@ import { getUserStore } from '../modules/auth/userStore.js';
 import { sanitizeDisplayNameForPublic } from '../modules/profiles/publicDisplay.js';
 import { getProfileStore } from '../modules/profiles/profileStore.js';
 import { getBlockStore } from '../modules/safety/blockStore.js';
+import { notifySafetyReport } from '../modules/safety/notify.js';
+import {
+  getReportStore,
+  parseReportReason,
+} from '../modules/safety/reportStore.js';
 
 const blockSchema = z.object({
   userId: z.string().uuid().or(z.string().min(1).max(80)),
@@ -15,6 +20,8 @@ const reportSchema = z.object({
   userId: z.string().uuid().or(z.string().min(1).max(80)),
   reason: z.string().trim().min(1).max(200),
   details: z.string().max(2000).optional(),
+  contentType: z.enum(['user', 'message', 'profile', 'photo']).optional(),
+  contentId: z.string().max(200).optional(),
 });
 
 /** Block / report - safety is a day-one product requirement. */
@@ -161,13 +168,37 @@ export const safetyRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
-    // MVP: accept report payload; admin queue / persistence is later.
-    return {
-      ok: true,
-      status: 'received',
-      todo: 'Persist report + evidence snapshot for admin queue',
-      targetUserId: parsed.data.userId,
-      reason: parsed.data.reason,
-    };
+    const reason = parseReportReason(parsed.data.reason);
+    if (!reason) {
+      return reply.code(400).send({ error: 'invalid_reason' });
+    }
+
+    const targetUserId = parsed.data.userId;
+    if (targetUserId === auth.userId) {
+      return reply.code(400).send({ error: 'cannot_report_self' });
+    }
+
+    const users = await getUserStore();
+    const peer = await users.findById(targetUserId);
+    if (!peer) {
+      return reply.code(404).send({ error: 'user_not_found' });
+    }
+
+    const evidence: { contentType?: string; contentId?: string } = {};
+    if (parsed.data.contentType) evidence.contentType = parsed.data.contentType;
+    if (parsed.data.contentId) evidence.contentId = parsed.data.contentId;
+
+    const reports = await getReportStore();
+    const created = await reports.create({
+      reporterId: auth.userId,
+      targetUserId,
+      reason,
+      ...(parsed.data.details !== undefined ? { details: parsed.data.details } : {}),
+      evidence,
+    });
+
+    void notifySafetyReport(created, req.log);
+
+    return reply.code(201).send({ ok: true, status: 'received', reportId: created.id });
   });
 };

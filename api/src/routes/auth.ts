@@ -9,6 +9,11 @@ import {
   toPublic,
   verifyPassword,
 } from '../modules/auth/userStore.js';
+import { verifyGoogleIdToken } from '../modules/auth/googleToken.js';
+import {
+  completePasswordReset,
+  requestPasswordReset,
+} from '../modules/auth/passwordReset.js';
 import { getLocationStore } from '../modules/geo/locationStore.js';
 import { getProfileStore } from '../modules/profiles/profileStore.js';
 
@@ -108,6 +113,85 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       email: user.email,
     });
     return { accessToken, user: toPublic(user) };
+  });
+
+  app.post('/forgot-password', async (req, reply) => {
+    const body = z.object({ email: z.string().email() }).safeParse(req.body);
+    if (!body.success) {
+      return reply.code(400).send({ error: 'invalid_body' });
+    }
+    await requestPasswordReset(body.data.email);
+    return {
+      ok: true,
+      message: 'If an account exists, we sent reset instructions.',
+    };
+  });
+
+  app.post('/reset-password', async (req, reply) => {
+    const body = z
+      .object({
+        token: z.string().min(20),
+        password: z.string().min(8),
+      })
+      .safeParse(req.body);
+    if (!body.success) {
+      return reply.code(400).send({ error: 'invalid_body' });
+    }
+    const result = await completePasswordReset(
+      body.data.token,
+      body.data.password,
+    );
+    if (result === 'weak') {
+      return reply.code(400).send({ error: 'password_too_short' });
+    }
+    if (result === 'invalid') {
+      return reply.code(400).send({ error: 'invalid_or_expired_token' });
+    }
+    return { ok: true };
+  });
+
+  app.post('/google', async (req, reply) => {
+    const body = z
+      .object({
+        idToken: z.string().min(20),
+        acceptedAgeGate: z.literal(true),
+        tosAccepted: z.literal(true),
+        privacyAccepted: z.literal(true),
+      })
+      .safeParse(req.body);
+    if (!body.success) {
+      return reply.code(400).send({ error: 'invalid_body' });
+    }
+
+    const profile = await verifyGoogleIdToken(body.data.idToken);
+    if (!profile || !profile.emailVerified) {
+      return reply.code(401).send({ error: 'invalid_google_token' });
+    }
+
+    const store = await getUserStore();
+    try {
+      const user = await store.upsertGoogleUser({
+        googleSub: profile.sub,
+        email: profile.email,
+        acceptedAgeGate: true,
+        tosAccepted: true,
+        privacyAccepted: true,
+      });
+      const accessToken = await signAccessToken({
+        sub: user.id,
+        email: user.email,
+      });
+      return { accessToken, user };
+    } catch (err) {
+      const code = errorCode(err);
+      if (code === 'email_taken') {
+        return reply.code(409).send({
+          error: 'email_taken',
+          message: 'An account with this email already exists. Log in with email/password.',
+        });
+      }
+      throw err;
+    }
   });
 
   app.post('/logout', async (_req, reply) => {

@@ -9,7 +9,11 @@ import {
   sourceFromKind,
   type AlbumSource,
 } from '../modules/media/albumStore.js';
-import { ALBUM_MAX_PHOTOS } from '../modules/media/limits.js';
+import {
+  ALBUM_MAX_PHOTOS,
+  ALBUM_MAX_VIDEOS,
+} from '../modules/media/limits.js';
+import type { MediaType } from '../modules/media/storage.js';
 import {
   PHOTO_MAX_BYTES,
   VIDEO_MAX_BYTES,
@@ -23,6 +27,23 @@ import { getProfileStore } from '../modules/profiles/profileStore.js';
 
 const kindSchema = z.enum(['profile', 'chat', 'album']);
 const sourceSchema = z.enum(['upload', 'chat', 'camera', 'profile', 'album']);
+
+type AlbumStoreLike = Awaited<ReturnType<typeof getAlbumStore>>;
+
+/** Chat sends always land in Findr album; rotate oldest when at cap. */
+async function makeAlbumRoomForChat(
+  album: AlbumStoreLike,
+  userId: string,
+  mediaType: MediaType,
+): Promise<void> {
+  const counts = await album.countForUser(userId);
+  if (mediaType === 'video' && counts.videos >= ALBUM_MAX_VIDEOS) {
+    await album.deleteOldestForUser(userId, 'video');
+  }
+  if (mediaType === 'photo' && counts.photos >= ALBUM_MAX_PHOTOS) {
+    await album.deleteOldestForUser(userId, 'photo');
+  }
+}
 
 /**
  * JWT-protected image/video uploads -> local api/uploads/.
@@ -137,6 +158,9 @@ export const mediaRoutes: FastifyPluginAsync = async (app) => {
       // Always save chat/album/camera captures into the personal Findr album.
       // Profile photos also land in album for reuse.
       const album = await getAlbumStore();
+      if (kind === 'chat') {
+        await makeAlbumRoomForChat(album, auth.userId, saved.mediaType);
+      }
       let albumItem;
       try {
         albumItem = await album.add({

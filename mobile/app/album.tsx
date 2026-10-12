@@ -200,8 +200,9 @@ export default function AlbumScreen() {
         }}
       />
       <Text style={styles.privacy}>
-        Stays in Findr only — not your phone gallery. Up to {ALBUM_MAX_PHOTOS}{' '}
-        photos and {ALBUM_MAX_VIDEOS} in-app video ({VIDEO_MAX_DURATION_SEC}s max).
+        Stays in Findr only — not your phone gallery. Chat photos & videos show
+        here too (up to {ALBUM_MAX_PHOTOS} photos, {ALBUM_MAX_VIDEOS} video; oldest
+        drops when you send new chat media).
       </Text>
       <Text style={styles.counts}>
         {counts.photos}/{ALBUM_MAX_PHOTOS} photos · {counts.videos}/

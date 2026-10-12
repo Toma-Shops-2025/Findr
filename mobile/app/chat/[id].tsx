@@ -247,10 +247,8 @@ export default function ChatThreadScreen() {
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
     } catch (err) {
       const code = (err as Error & { code?: string }).code;
-      if (code === 'album_video_limit') {
-        setError('Your Findr album already has a video. Delete it in Album to send another.');
-      } else if (code === 'album_photo_limit') {
-        setError('Your Findr album is full (10 photos). Delete one in Album to send more.');
+      if (code === 'album_video_limit' || code === 'album_photo_limit') {
+        setError('Could not save to your Findr album. Try again.');
       } else {
         setError(err instanceof Error ? err.message : 'Send failed');
       }

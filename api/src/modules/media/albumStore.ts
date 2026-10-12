@@ -131,6 +131,20 @@ class MemoryAlbumStore {
     this.byId.delete(id);
     return true;
   }
+
+  /** Drop oldest album row of this type (chat stash rotation). */
+  async deleteOldestForUser(
+    userId: string,
+    mediaType: MediaType,
+  ): Promise<boolean> {
+    const rows = [...this.byId.values()]
+      .filter((m) => m.userId === userId && m.mediaType === mediaType)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const oldest = rows[0];
+    if (!oldest) return false;
+    this.byId.delete(oldest.id);
+    return true;
+  }
 }
 
 class PostgresAlbumStore {
@@ -190,6 +204,24 @@ class PostgresAlbumStore {
     const result = await this.pool.query(
       `DELETE FROM user_media WHERE id = $1 AND user_id = $2`,
       [id, userId],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async deleteOldestForUser(
+    userId: string,
+    mediaType: MediaType,
+  ): Promise<boolean> {
+    const result = await this.pool.query(
+      `DELETE FROM user_media
+       WHERE id = (
+         SELECT id FROM user_media
+         WHERE user_id = $1 AND media_type = $2
+         ORDER BY created_at ASC
+         LIMIT 1
+       )
+       RETURNING id`,
+      [userId, mediaType],
     );
     return (result.rowCount ?? 0) > 0;
   }

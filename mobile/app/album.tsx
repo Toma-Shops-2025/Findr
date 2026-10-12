@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,7 +12,7 @@ import {
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 
-import { colors, radii, spacing, typography } from '@/constants/theme';
+import { colors, radii, spacing } from '@/constants/theme';
 import {
   apiDeleteAlbumItem,
   apiFetch,
@@ -21,14 +21,24 @@ import {
   type AlbumItem,
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import {
+  ALBUM_MAX_PHOTOS,
+  ALBUM_MAX_VIDEOS,
+  VIDEO_MAX_DURATION_SEC,
+} from '@/lib/mediaLimits';
 import { resolveMediaUrl } from '@/lib/mediaUrl';
 import type { PublicMessage } from '@/lib/types';
 
-/**
- * Personal Findr album (Stage 2d photo path).
- * API: GET/DELETE /media/album. Photo path only (no in-app capture natives).
- * Video items show a stub tile; add-video stays parked for Stage 2e.
- */
+function albumCounts(items: AlbumItem[]) {
+  let photos = 0;
+  let videos = 0;
+  for (const item of items) {
+    if (item.mediaType === 'video') videos += 1;
+    else photos += 1;
+  }
+  return { photos, videos };
+}
+
 export default function AlbumScreen() {
   const { accessToken } = useAuth();
   const params = useLocalSearchParams<{ conversationId?: string }>();
@@ -38,6 +48,8 @@ export default function AlbumScreen() {
   const [items, setItems] = useState<AlbumItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+
+  const counts = useMemo(() => albumCounts(items), [items]);
 
   const load = useCallback(async () => {
     if (!accessToken) return;
@@ -63,21 +75,18 @@ export default function AlbumScreen() {
 
   const sendToChat = async (item: AlbumItem) => {
     if (!accessToken || !conversationId || busy) return;
-    if (item.mediaType === 'video') {
-      Alert.alert(
-        'Video later',
-        'Video send returns in Stage 2e. Photos work now.',
-      );
-      return;
-    }
     setBusy(true);
     try {
+      const payload =
+        item.mediaType === 'video'
+          ? { body: '', videoUrl: item.url }
+          : { body: '', imageUrl: item.url };
       await apiFetch<{ message: PublicMessage }>(
         `/chat/conversations/${conversationId}/messages`,
         {
           method: 'POST',
           token: accessToken,
-          body: JSON.stringify({ body: '', imageUrl: item.url }),
+          body: JSON.stringify(payload),
         },
       );
       router.back();
@@ -113,41 +122,80 @@ export default function AlbumScreen() {
     ]);
   };
 
-  const addFromPicker = async () => {
+  const addFromPicker = async (mediaType: 'photo' | 'video') => {
     if (!accessToken || busy) return;
+    if (mediaType === 'photo' && counts.photos >= ALBUM_MAX_PHOTOS) {
+      Alert.alert(
+        'Album full',
+        `You can store up to ${ALBUM_MAX_PHOTOS} photos. Long-press one to remove.`,
+      );
+      return;
+    }
+    if (mediaType === 'video' && counts.videos >= ALBUM_MAX_VIDEOS) {
+      Alert.alert(
+        'Video limit',
+        `You can store ${ALBUM_MAX_VIDEOS} video in Findr. Remove it to add another.`,
+      );
+      return;
+    }
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Alert.alert(
         'Library access needed',
-        'Allow Findr to pick a photo for your Findr album. Copied into Findr only -- not re-saved to your gallery.',
+        'Allow Findr to pick media for your Findr album. Copied into Findr only -- not re-saved to your gallery.',
       );
       return;
     }
     const picked = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: mediaType === 'video' ? ['videos'] : ['images'],
       quality: 0.8,
       allowsEditing: false,
+      videoMaxDuration: VIDEO_MAX_DURATION_SEC,
     });
     if (picked.canceled || !picked.assets?.[0]?.uri) return;
     const asset = picked.assets[0];
     setBusy(true);
     try {
+      const duration =
+        mediaType === 'video' && asset.duration != null
+          ? asset.duration <= 120
+            ? Math.round(asset.duration * 1000)
+            : Math.round(asset.duration)
+          : null;
       await apiUploadMedia(asset.uri, {
         token: accessToken,
         kind: 'album',
-        mediaType: 'photo',
+        mediaType,
         source: 'album',
-        fileName: asset.fileName ?? 'album.jpg',
+        fileName:
+          asset.fileName ??
+          (mediaType === 'video' ? 'album.mp4' : 'album.jpg'),
+        durationMs: duration,
       });
       await load();
     } catch (err) {
-      Alert.alert(
-        'Add failed',
-        err instanceof Error ? err.message : 'Could not add to album',
-      );
+      const code = (err as Error & { code?: string }).code;
+      let msg = err instanceof Error ? err.message : 'Could not add to album';
+      if (code === 'album_video_limit') {
+        msg = `Album allows ${ALBUM_MAX_VIDEOS} video. Remove the existing one first.`;
+      } else if (code === 'album_photo_limit') {
+        msg = `Album allows ${ALBUM_MAX_PHOTOS} photos. Remove one first.`;
+      }
+      Alert.alert('Add failed', msg);
     } finally {
       setBusy(false);
     }
+  };
+
+  const openAddMenu = () => {
+    Alert.alert('Add to Findr album', 'Not saved to your phone gallery.', [
+      { text: 'Photo', onPress: () => void addFromPicker('photo') },
+      {
+        text: `Video (${VIDEO_MAX_DURATION_SEC}s max)`,
+        onPress: () => void addFromPicker('video'),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   return (
@@ -158,16 +206,20 @@ export default function AlbumScreen() {
         }}
       />
       <Text style={styles.privacy}>
-        Stays in Findr only -- not your phone gallery. Photos max 8MB. Video
-        capture returns in Stage 2e.
+        Stays in Findr only — not your phone gallery. Up to {ALBUM_MAX_PHOTOS}{' '}
+        photos and {ALBUM_MAX_VIDEOS} video ({VIDEO_MAX_DURATION_SEC}s max).
+      </Text>
+      <Text style={styles.counts}>
+        {counts.photos}/{ALBUM_MAX_PHOTOS} photos · {counts.videos}/
+        {ALBUM_MAX_VIDEOS} video
       </Text>
       <View style={styles.actions}>
         <Pressable
           style={styles.actionBtn}
-          onPress={addFromPicker}
+          onPress={openAddMenu}
           disabled={busy}
         >
-          <Text style={styles.actionText}>Add photo</Text>
+          <Text style={styles.actionText}>Add media</Text>
         </Pressable>
       </View>
       {loading ? (
@@ -180,7 +232,7 @@ export default function AlbumScreen() {
           contentContainerStyle={styles.grid}
           ListEmptyComponent={
             <Text style={styles.empty}>
-              Empty album. Add a photo -- it stays in Findr.
+              Empty album. Add a photo or short video — it stays in Findr.
             </Text>
           }
           renderItem={({ item }) => {
@@ -198,27 +250,20 @@ export default function AlbumScreen() {
                 }
                 onLongPress={() => onDelete(item)}
               >
-                {item.mediaType === 'photo' && uri ? (
-                  <Image
-                    source={{ uri }}
-                    style={styles.tileImg}
-                    accessibilityIgnoresInvertColors
-                  />
-                ) : (
+                {item.mediaType === 'video' ? (
                   <View style={[styles.tileImg, styles.videoTile]}>
                     <Text style={styles.videoLabel}>Video</Text>
                   </View>
+                ) : uri ? (
+                  <Image source={{ uri }} style={styles.tileImg} />
+                ) : (
+                  <View style={styles.tileImg} />
                 )}
               </Pressable>
             );
           }}
         />
       )}
-      {busy ? (
-        <View style={styles.busy}>
-          <ActivityIndicator color={colors.coral} />
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -226,63 +271,47 @@ export default function AlbumScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.ink },
   privacy: {
-    fontFamily: typography.body,
-    color: colors.mistMuted,
     fontSize: 12,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    lineHeight: 16,
+    color: colors.mistMuted,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+  },
+  counts: {
+    fontSize: 12,
+    color: colors.teal,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
   },
   actions: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    padding: spacing.lg,
     gap: spacing.sm,
-    padding: spacing.md,
   },
   actionBtn: {
     backgroundColor: colors.inkElevated,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.sm + 2,
     paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
   },
-  actionText: {
-    fontFamily: typography.bodyMedium,
-    color: colors.coral,
-    fontSize: 13,
-  },
-  grid: { padding: spacing.sm, gap: spacing.xs },
-  empty: {
-    fontFamily: typography.body,
-    color: colors.mistMuted,
-    textAlign: 'center',
-    marginTop: spacing.xl,
-    paddingHorizontal: spacing.lg,
-  },
+  actionText: { color: colors.mist, fontWeight: '600' },
+  grid: { padding: spacing.sm },
   tile: {
-    width: '33.33%',
+    flex: 1 / 3,
     aspectRatio: 1,
-    padding: 2,
+    padding: 4,
   },
   tileImg: {
     flex: 1,
     borderRadius: radii.sm,
     backgroundColor: colors.inkElevated,
   },
-  videoTile: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  videoLabel: {
-    fontFamily: typography.bodyMedium,
-    color: colors.mist,
-    fontSize: 12,
-  },
-  busy: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  videoTile: { alignItems: 'center', justifyContent: 'center' },
+  videoLabel: { color: colors.mist, fontWeight: '600' },
+  empty: {
+    fontSize: 15,
+    color: colors.mistMuted,
+    textAlign: 'center',
+    marginTop: 48,
+    paddingHorizontal: spacing.lg,
   },
 });

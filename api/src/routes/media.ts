@@ -4,10 +4,12 @@ import { z } from 'zod';
 
 import { requireAuth } from '../modules/auth/requireAuth.js';
 import {
+  AlbumCapacityError,
   getAlbumStore,
   sourceFromKind,
   type AlbumSource,
 } from '../modules/media/albumStore.js';
+import { ALBUM_MAX_PHOTOS } from '../modules/media/limits.js';
 import {
   PHOTO_MAX_BYTES,
   VIDEO_MAX_BYTES,
@@ -122,15 +124,32 @@ export const mediaRoutes: FastifyPluginAsync = async (app) => {
       // Always save chat/album/camera captures into the personal Findr album.
       // Profile photos also land in album for reuse.
       const album = await getAlbumStore();
-      const albumItem = await album.add({
-        userId: auth.userId,
-        mediaType: saved.mediaType,
-        url: saved.relativeUrl,
-        mime: data.mimetype ?? null,
-        bytes: saved.bytes,
-        durationMs,
-        source: sourceFromKind(kind, source ?? (kind === 'chat' ? 'chat' : undefined)),
-      });
+      let albumItem;
+      try {
+        albumItem = await album.add({
+          userId: auth.userId,
+          mediaType: saved.mediaType,
+          url: saved.relativeUrl,
+          mime: data.mimetype ?? null,
+          bytes: saved.bytes,
+          durationMs,
+          source: sourceFromKind(
+            kind,
+            source ?? (kind === 'chat' ? 'chat' : undefined),
+          ),
+        });
+      } catch (err) {
+        if (err instanceof AlbumCapacityError) {
+          return reply.code(409).send({
+            error: err.code,
+            message:
+              err.code === 'album_video_limit'
+                ? `Findr album allows ${1} video. Delete it to add another.`
+                : `Findr album allows ${ALBUM_MAX_PHOTOS} photos. Delete one to add another.`,
+          });
+        }
+        throw err;
+      }
 
       if (kind === 'profile' && saved.mediaType === 'photo') {
         const store = await getProfileStore();
@@ -154,7 +173,7 @@ export const mediaRoutes: FastifyPluginAsync = async (app) => {
           age?: number | null;
         } = {
           displayName,
-          photoUrls: [saved.relativeUrl, ...rest].slice(0, 6),
+          photoUrls: [saved.relativeUrl, ...rest].slice(0, 5),
         };
         if (existing?.bio !== undefined) update.bio = existing.bio;
         if (existing?.genderIdentity !== undefined) {

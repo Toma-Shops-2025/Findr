@@ -4,6 +4,13 @@ export const VIDEO_MAX_BYTES = 25 * 1024 * 1024;
 export const VIDEO_MAX_DURATION_SEC = 30;
 export const VIDEO_MAX_DURATION_MS = VIDEO_MAX_DURATION_SEC * 1000;
 
+/** Public profile gallery (first URL = main). */
+export const PROFILE_MAX_PHOTOS = 5;
+
+/** Personal Findr album (chat stash / resend). */
+export const ALBUM_MAX_PHOTOS = 10;
+export const ALBUM_MAX_VIDEOS = 1;
+
 /**
  * Privacy: Findr never writes captures to the device Photos/Gallery/Camera Roll.
  * Camera + picker output stays in the app sandbox, then uploads to Findr album/API.

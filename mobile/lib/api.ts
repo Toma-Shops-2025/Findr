@@ -1,7 +1,10 @@
 import Constants from 'expo-constants';
 import * as FileSystem from 'expo-file-system/legacy';
 
-import { PHOTO_MAX_BYTES } from '@/lib/mediaLimits';
+import {
+  PHOTO_MAX_BYTES,
+  VIDEO_MAX_BYTES,
+} from '@/lib/mediaLimits';
 
 /**
  * API base URL for the Findr backend.
@@ -87,11 +90,30 @@ function guessImageMime(name: string): string {
   return 'image/jpeg';
 }
 
+function guessVideoMime(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.mov')) return 'video/quicktime';
+  if (lower.endsWith('.webm')) return 'video/webm';
+  if (lower.endsWith('.m4v')) return 'video/x-m4v';
+  return 'video/mp4';
+}
+
+function extForMedia(mediaType: MediaType, name: string): string {
+  const lower = name.toLowerCase();
+  if (mediaType === 'photo') {
+    if (lower.endsWith('.png')) return '.png';
+    if (lower.endsWith('.webp')) return '.webp';
+    return '.jpg';
+  }
+  if (lower.endsWith('.mov')) return '.mov';
+  if (lower.endsWith('.webm')) return '.webm';
+  return '.mp4';
+}
+
 /**
- * Stage 2d: photo upload (profile / chat / album images).
+ * Photo / short video upload (profile / chat / album).
  * SDK 57: use expo-file-system/legacy uploadAsync -- do NOT append RN
  * { uri, name, type } into FormData + fetch (Unsupported FormDataPart).
- * Video upload stays parked until Stage 2e.
  */
 export async function apiUploadMedia(
   localUri: string,
@@ -104,30 +126,28 @@ export async function apiUploadMedia(
     durationMs?: number | null;
   },
 ): Promise<UploadResult> {
-  if (opts.mediaType !== 'photo') {
-    throw new Error('Video upload returns in Stage 2e');
-  }
-
-  const name = opts.fileName ?? localUri.split('/').pop() ?? 'photo.jpg';
-  const type = guessImageMime(name);
+  const isVideo = opts.mediaType === 'video';
+  const defaultName = isVideo ? 'clip.mp4' : 'photo.jpg';
+  const name = opts.fileName ?? localUri.split('/').pop() ?? defaultName;
+  const type = isVideo ? guessVideoMime(name) : guessImageMime(name);
+  const maxBytes = isVideo ? VIDEO_MAX_BYTES : PHOTO_MAX_BYTES;
 
   let fileUri = localUri;
-  // uploadAsync on Android prefers file://; copy content:// into cache first.
   if (fileUri.startsWith('content://')) {
     const base = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
     if (!base) {
-      throw new Error('No cache directory for photo upload');
+      throw new Error('No cache directory for upload');
     }
-    const dest = `${base}findr-upload-${Date.now()}.jpg`;
+    const dest = `${base}findr-upload-${Date.now()}${extForMedia(opts.mediaType, name)}`;
     await FileSystem.copyAsync({ from: fileUri, to: dest });
     fileUri = dest;
   }
 
   const info = await FileSystem.getInfoAsync(fileUri);
   if (info.exists && 'size' in info && typeof info.size === 'number') {
-    if (info.size > PHOTO_MAX_BYTES) {
+    if (info.size > maxBytes) {
       throw new Error(
-        `File too large (max ${Math.round(PHOTO_MAX_BYTES / (1024 * 1024))}MB)`,
+        `File too large (max ${Math.round(maxBytes / (1024 * 1024))}MB)`,
       );
     }
   }
@@ -137,6 +157,9 @@ export async function apiUploadMedia(
     kind: opts.kind,
     source: opts.source ?? (opts.kind === 'chat' ? 'chat' : opts.kind),
   };
+  if (isVideo && opts.durationMs != null && opts.durationMs > 0) {
+    parameters.durationMs = String(Math.trunc(opts.durationMs));
+  }
 
   const upload = await FileSystem.uploadAsync(url, fileUri, {
     httpMethod: 'POST',

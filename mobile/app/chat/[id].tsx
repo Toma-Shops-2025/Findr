@@ -15,8 +15,12 @@ import {
 import { Stack, router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import { Video, ResizeMode } from 'expo-av';
 
 import { colors, radii, spacing, typography } from '@/constants/theme';
+import {
+  VIDEO_MAX_DURATION_SEC,
+} from '@/lib/mediaLimits';
 import { apiFetch, apiUploadMedia } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { resolveMediaUrl } from '@/lib/mediaUrl';
@@ -31,7 +35,7 @@ const CHAT_AD_RESERVED_DP = 56;
 /**
  * Stage 2d chat thread: text + photo attach + double-tap likes + album entry.
  * Composer sits above a named ad-reserved band (no ad SDK yet).
- * No in-app camera capture or video-player natives. Video receive is a text stub.
+ * Stage 2e: gallery photo + short video (30s). Playback via expo-av.
  */
 export default function ChatThreadScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -209,7 +213,12 @@ export default function ChatThreadScreen() {
     }
   };
 
-  const uploadAndSendPhoto = async (uri: string, fileName: string) => {
+  const uploadAndSendMedia = async (
+    uri: string,
+    mediaType: 'photo' | 'video',
+    fileName: string,
+    durationMs?: number | null,
+  ) => {
     if (!accessToken || !id) return;
     setSending(true);
     setError(null);
@@ -217,48 +226,74 @@ export default function ChatThreadScreen() {
       const uploaded = await apiUploadMedia(uri, {
         token: accessToken,
         kind: 'chat',
-        mediaType: 'photo',
+        mediaType,
         source: 'chat',
         fileName,
+        durationMs: durationMs ?? null,
       });
+      const payload =
+        mediaType === 'video'
+          ? { body: '', videoUrl: uploaded.url }
+          : { body: '', imageUrl: uploaded.url };
       const data = await apiFetch<{ message: PublicMessage }>(
         `/chat/conversations/${id}/messages`,
         {
           method: 'POST',
           token: accessToken,
-          body: JSON.stringify({ body: '', imageUrl: uploaded.url }),
+          body: JSON.stringify(payload),
         },
       );
       setMessages((prev) => [...prev, normalizeMessage(data.message)]);
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Photo send failed');
+      const code = (err as Error & { code?: string }).code;
+      if (code === 'album_video_limit') {
+        setError('Your Findr album already has a video. Delete it in Album to send another.');
+      } else if (code === 'album_photo_limit') {
+        setError('Your Findr album is full (10 photos). Delete one in Album to send more.');
+      } else {
+        setError(err instanceof Error ? err.message : 'Send failed');
+      }
     } finally {
       setSending(false);
     }
   };
 
-  const onPickPhoto = async () => {
+  const onPickGallery = async (mediaType: 'photo' | 'video') => {
     if (!accessToken || !id || sending) return;
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Alert.alert(
         'Library access needed',
-        'Allow Findr to pick a photo to send. It is uploaded to Findr only -- not saved back to your phone gallery.',
+        'Allow Findr to pick media to send. It is uploaded to Findr only -- not saved back to your phone gallery.',
       );
       return;
     }
     const picked = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: mediaType === 'video' ? ['videos'] : ['images'],
       quality: 0.8,
       allowsEditing: false,
+      videoMaxDuration: VIDEO_MAX_DURATION_SEC,
     });
     if (picked.canceled || !picked.assets?.[0]?.uri) return;
     const asset = picked.assets[0];
-    await uploadAndSendPhoto(
+    const durationMs =
+      mediaType === 'video' ? videoDurationMs(asset.duration) : null;
+    await uploadAndSendMedia(
       asset.uri,
-      asset.fileName ?? 'chat.jpg',
+      mediaType,
+      asset.fileName ?? (mediaType === 'video' ? 'chat.mp4' : 'chat.jpg'),
+      durationMs,
     );
+  };
+
+  const openAttachMenu = () => {
+    if (!id || sending) return;
+    Alert.alert('Attach', 'Stays in Findr only — not your phone gallery.', [
+      { text: 'Photo', onPress: () => void onPickGallery('photo') },
+      { text: `Video (max ${VIDEO_MAX_DURATION_SEC}s)`, onPress: () => void onPickGallery('video') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   const openAlbum = () => {
@@ -303,7 +338,7 @@ export default function ChatThreadScreen() {
         }
         renderItem={({ item }) => {
           const imageUri = resolveMediaUrl(item.imageUrl);
-          const hasVideo = Boolean(item.videoUrl);
+          const videoUri = resolveMediaUrl(item.videoUrl);
           const showHeart = (item.likeCount ?? 0) > 0 || item.likedByMe;
           return (
             <Pressable
@@ -317,15 +352,14 @@ export default function ChatThreadScreen() {
                   accessibilityIgnoresInvertColors
                 />
               ) : null}
-              {hasVideo ? (
-                <View style={styles.videoStub}>
-                  <Text
-                    style={[styles.videoStubText, item.mine && styles.mineText]}
-                  >
-                    [Video] Playback arrives in a later update. Double-tap to
-                    like.
-                  </Text>
-                </View>
+              {videoUri ? (
+                <Video
+                  source={{ uri: videoUri }}
+                  style={styles.bubbleVideo}
+                  useNativeControls
+                  resizeMode={ResizeMode.COVER}
+                  isLooping={false}
+                />
               ) : null}
               {item.location ? (
                 <Text
@@ -359,11 +393,11 @@ export default function ChatThreadScreen() {
       <View style={styles.composer}>
         <Pressable
           style={[styles.toolBtn, sending && styles.sendDisabled]}
-          onPress={onPickPhoto}
+          onPress={openAttachMenu}
           disabled={sending}
-          accessibilityLabel="Attach photo"
+          accessibilityLabel="Attach photo or video"
         >
-          <Text style={styles.toolBtnText}>Photo</Text>
+          <Text style={styles.toolBtnText}>Attach</Text>
         </Pressable>
         <Pressable
           style={[styles.toolBtn, sending && styles.sendDisabled]}
@@ -404,6 +438,13 @@ export default function ChatThreadScreen() {
       </View>
     </KeyboardAvoidingView>
   );
+}
+
+/** ImagePicker: seconds on Android, ms on iOS. */
+function videoDurationMs(duration: number | undefined | null): number | null {
+  if (duration == null || !Number.isFinite(duration)) return null;
+  if (duration <= 120) return Math.round(duration * 1000);
+  return Math.round(duration);
 }
 
 function normalizeMessage(m: PublicMessage): PublicMessage {
@@ -486,15 +527,12 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     backgroundColor: colors.ink,
   },
-  videoStub: {
-    minWidth: 180,
-    paddingVertical: spacing.sm,
-  },
-  videoStubText: {
-    fontFamily: typography.body,
-    color: colors.mist,
-    fontSize: 13,
-    lineHeight: 18,
+  bubbleVideo: {
+    width: 200,
+    height: 150,
+    borderRadius: radii.md,
+    backgroundColor: colors.ink,
+    marginBottom: spacing.xs,
   },
   bubbleText: {
     fontFamily: typography.body,

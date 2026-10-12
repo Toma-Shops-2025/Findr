@@ -1,7 +1,6 @@
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,7 +16,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { colors, radii, spacing, typography } from '@/constants/theme';
 import { apiFetch, apiUploadImage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { primaryPhotoUrl } from '@/lib/mediaUrl';
+import { ProfilePhotoGallery } from '@/components/ProfilePhotoGallery';
+import { PROFILE_MAX_PHOTOS } from '@/lib/mediaLimits';
 import { LOOKING_FOR_OPTIONS, type LookingFor, type PublicProfile } from '@/lib/types';
 
 export default function ProfileScreen() {
@@ -99,8 +99,35 @@ export default function ProfileScreen() {
       .map((s) => s.trim())
       .filter(Boolean);
 
+  const persistPhotoUrls = async (next: string[]) => {
+    if (!accessToken) return;
+    const trimmed = next.slice(0, PROFILE_MAX_PHOTOS);
+    setPhotoUrls(trimmed);
+    try {
+      const data = await apiFetch<{ profile: PublicProfile }>('/profiles/me', {
+        method: 'PUT',
+        token: accessToken,
+        body: JSON.stringify({ photoUrls: trimmed }),
+      });
+      applyProfile(data.profile);
+    } catch (err) {
+      Alert.alert(
+        'Could not update photos',
+        err instanceof Error ? err.message : 'Try again',
+      );
+      await load();
+    }
+  };
+
   const onPickPhoto = async () => {
     if (!accessToken || uploading) return;
+    if (photoUrls.length >= PROFILE_MAX_PHOTOS) {
+      Alert.alert(
+        'Photo limit',
+        `You can have up to ${PROFILE_MAX_PHOTOS} profile photos. Remove one to add another.`,
+      );
+      return;
+    }
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Alert.alert(
@@ -127,7 +154,10 @@ export default function ProfileScreen() {
         fileName: asset.fileName ?? 'profile.jpg',
       });
       setPhotoUrls((prev) =>
-        [uploaded.url, ...prev.filter((u) => u !== uploaded.url)].slice(0, 6),
+        [uploaded.url, ...prev.filter((u) => u !== uploaded.url)].slice(
+          0,
+          PROFILE_MAX_PHOTOS,
+        ),
       );
       // Refresh from server (upload also updates profile photoUrls).
       await load();
@@ -223,35 +253,30 @@ export default function ProfileScreen() {
       </View>
     );
   }
-  const initial = (displayName.trim()[0] || '?').toUpperCase();
-  const photoUri = primaryPhotoUrl(photoUrls);
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
-      <Pressable
-        style={styles.photo}
-        onPress={onPickPhoto}
-        disabled={uploading}
-      >
-        {photoUri ? (
-          <Image source={{ uri: photoUri }} style={styles.photoImage} />
-        ) : (
-          <Text style={styles.initial}>{initial}</Text>
-        )}
-        {uploading ? (
-          <View style={styles.photoOverlay}>
-            <ActivityIndicator color={colors.mist} />
-          </View>
-        ) : null}
-      </Pressable>
-      <Pressable onPress={onPickPhoto} disabled={uploading}>
-        <Text style={styles.photoLink}>
-          {uploading ? 'Uploading...' : photoUri ? 'Change photo' : 'Add photo'}
-        </Text>
-      </Pressable>
+      <ProfilePhotoGallery
+        photoUrls={photoUrls}
+        displayName={displayName}
+        editable
+        uploading={uploading}
+        onAddPhoto={onPickPhoto}
+        onSetMain={(i) => {
+          if (i <= 0 || i >= photoUrls.length) return;
+          const next = [...photoUrls];
+          const [picked] = next.splice(i, 1);
+          next.unshift(picked);
+          void persistPhotoUrls(next);
+        }}
+        onRemove={(i) => {
+          const next = photoUrls.filter((_, idx) => idx !== i);
+          void persistPhotoUrls(next);
+        }}
+      />
       <Text style={styles.name}>{displayName.trim() || 'Your profile'}</Text>
       <Text style={styles.meta}>
         {age != null

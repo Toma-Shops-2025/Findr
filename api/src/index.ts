@@ -1,9 +1,8 @@
 import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
-import fastifyStatic from '@fastify/static';
-
 import { healthRoutes } from './routes/health.js';
+import { uploadsRoutes } from './routes/uploads.js';
 import { authRoutes } from './routes/auth.js';
 import { profileRoutes } from './routes/profiles.js';
 import { geoRoutes } from './routes/geo.js';
@@ -28,14 +27,7 @@ async function main() {
 
   await app.register(cors, { origin: true });
 
-  // Serve local MVP uploads under /uploads/…
-  // Render disk is ephemeral unless a Persistent Disk is mounted.
-  // Play Store should use S3/CDN instead.
-  await app.register(fastifyStatic, {
-    root: UPLOADS_DIR,
-    prefix: '/uploads/',
-    decorateReply: false,
-  });
+  await app.register(uploadsRoutes);
 
   await app.register(healthRoutes);
   await app.register(authRoutes, { prefix: '/auth' });

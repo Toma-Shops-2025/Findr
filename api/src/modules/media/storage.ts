@@ -131,13 +131,14 @@ export async function saveUploadStream(opts: {
 
   if (getObjectStorageConfig()) {
     const key = `findr/${sub}/${name}`;
-    const publicUrl = await uploadPublicObject({
+    await uploadPublicObject({
       key,
       body,
       contentType,
     });
+    // Store API-relative paths in DB; /uploads/* handler redirects to R2 when needed.
     return {
-      relativeUrl: publicUrl,
+      relativeUrl: localUrl,
       absolutePath,
       bytes,
       mediaType: opts.mediaType,

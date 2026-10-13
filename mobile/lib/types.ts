@@ -60,6 +60,7 @@ export type ConversationSummary = {
   lastMessagePreview: string | null;
   lastMessageAt: string | null;
   updatedAt: string;
+  hasUnread?: boolean;
 };
 
 /** Approximate pin shared in chat (~100m / 3 decimal places by default). */

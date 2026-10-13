@@ -2,7 +2,10 @@ import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -47,6 +50,15 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.heroGlow} />
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
       <View style={styles.content}>
         <Text style={styles.brand}>Findr</Text>
         <Text style={styles.headline}>Welcome back.</Text>
@@ -132,6 +144,8 @@ export default function LoginScreen() {
           New here? Create an account
         </Link>
       </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -140,6 +154,13 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.ink,
+  },
+  flex: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: spacing.xl * 2,
   },
   heroGlow: {
     position: 'absolute',
@@ -152,7 +173,6 @@ const styles = StyleSheet.create({
     opacity: 0.16,
   },
   content: {
-    flex: 1,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xl * 2,
     gap: spacing.md,

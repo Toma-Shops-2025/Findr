@@ -32,6 +32,16 @@ function messagePreview(input: SendMessageInput): string {
   return '';
 }
 
+const CONV_SELECT = `id, user_a_id, user_b_id, last_message_preview, last_message_at,
+              last_message_sender_id, user_a_last_read_at, user_b_last_read_at,
+              created_at, updated_at`;
+
+function isoOrNull(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  if (value instanceof Date) return value.toISOString();
+  return String(value);
+}
+
 function rowToConversation(row: Record<string, unknown>): ConversationRecord {
   return {
     id: String(row.id),
@@ -39,12 +49,13 @@ function rowToConversation(row: Record<string, unknown>): ConversationRecord {
     userBId: String(row.user_b_id),
     lastMessagePreview:
       row.last_message_preview == null ? null : String(row.last_message_preview),
-    lastMessageAt:
-      row.last_message_at instanceof Date
-        ? row.last_message_at.toISOString()
-        : row.last_message_at
-          ? String(row.last_message_at)
-          : null,
+    lastMessageAt: isoOrNull(row.last_message_at),
+    lastMessageSenderId:
+      row.last_message_sender_id == null
+        ? null
+        : String(row.last_message_sender_id),
+    userALastReadAt: isoOrNull(row.user_a_last_read_at),
+    userBLastReadAt: isoOrNull(row.user_b_last_read_at),
     createdAt:
       row.created_at instanceof Date
         ? row.created_at.toISOString()
@@ -54,6 +65,18 @@ function rowToConversation(row: Record<string, unknown>): ConversationRecord {
         ? row.updated_at.toISOString()
         : String(row.updated_at ?? nowIso()),
   };
+}
+
+export function conversationHasUnread(
+  conv: ConversationRecord,
+  userId: string,
+): boolean {
+  if (!conv.lastMessageAt || !conv.lastMessageSenderId) return false;
+  if (conv.lastMessageSenderId === userId) return false;
+  const readAt =
+    conv.userAId === userId ? conv.userALastReadAt : conv.userBLastReadAt;
+  if (!readAt) return true;
+  return Date.parse(conv.lastMessageAt) > Date.parse(readAt);
 }
 
 function locationFromRow(row: Record<string, unknown>): MessageLocation | null {
@@ -220,6 +243,9 @@ class MemoryChatStore {
       userBId,
       lastMessagePreview: null,
       lastMessageAt: null,
+      lastMessageSenderId: null,
+      userALastReadAt: null,
+      userBLastReadAt: null,
       createdAt: stamp,
       updatedAt: stamp,
     };
@@ -280,10 +306,28 @@ class MemoryChatStore {
         : null,
     });
     conversation.lastMessageAt = message.createdAt;
+    conversation.lastMessageSenderId = senderId;
     conversation.updatedAt = message.createdAt;
     this.conversations.set(conversationId, conversation);
 
     return withLikes(message, false, 0);
+  }
+
+  async markRead(conversationId: string, userId: string): Promise<void> {
+    const conversation = this.assertMember(conversationId, userId);
+    const stamp = nowIso();
+    if (conversation.userAId === userId) {
+      conversation.userALastReadAt = stamp;
+    } else {
+      conversation.userBLastReadAt = stamp;
+    }
+    conversation.updatedAt = stamp;
+    this.conversations.set(conversationId, conversation);
+  }
+
+  async countUnread(userId: string): Promise<number> {
+    const list = await this.listForUser(userId);
+    return list.filter((c) => conversationHasUnread(c, userId)).length;
   }
 
   async likeMessage(
@@ -361,8 +405,7 @@ class PostgresChatStore {
 
   async listForUser(userId: string): Promise<ConversationRecord[]> {
     const result = await this.pool.query(
-      `SELECT id, user_a_id, user_b_id, last_message_preview, last_message_at,
-              created_at, updated_at
+      `SELECT ${CONV_SELECT}
        FROM conversations
        WHERE user_a_id = $1 OR user_b_id = $1
        ORDER BY COALESCE(last_message_at, updated_at) DESC`,
@@ -373,8 +416,7 @@ class PostgresChatStore {
 
   async getById(id: string): Promise<ConversationRecord | null> {
     const result = await this.pool.query(
-      `SELECT id, user_a_id, user_b_id, last_message_preview, last_message_at,
-              created_at, updated_at
+      `SELECT ${CONV_SELECT}
        FROM conversations
        WHERE id = $1
        LIMIT 1`,
@@ -390,8 +432,7 @@ class PostgresChatStore {
   ): Promise<{ conversation: ConversationRecord; created: boolean }> {
     const [userAId, userBId] = orderedPair(userId, peerId);
     const existing = await this.pool.query(
-      `SELECT id, user_a_id, user_b_id, last_message_preview, last_message_at,
-              created_at, updated_at
+      `SELECT ${CONV_SELECT}
        FROM conversations
        WHERE user_a_id = $1 AND user_b_id = $2
        LIMIT 1`,
@@ -405,8 +446,7 @@ class PostgresChatStore {
       `INSERT INTO conversations (user_a_id, user_b_id)
        VALUES ($1, $2)
        ON CONFLICT (user_a_id, user_b_id) DO UPDATE SET updated_at = conversations.updated_at
-       RETURNING id, user_a_id, user_b_id, last_message_preview, last_message_at,
-                 created_at, updated_at`,
+       RETURNING ${CONV_SELECT}`,
       [userAId, userBId],
     );
     const wasInsert = inserted.rowCount === 1 && !existing.rows[0];
@@ -525,9 +565,10 @@ class PostgresChatStore {
         `UPDATE conversations
          SET last_message_preview = $2,
              last_message_at = now(),
+             last_message_sender_id = $3,
              updated_at = now()
          WHERE id = $1`,
-        [conversationId, preview],
+        [conversationId, preview, senderId],
       );
       await client.query('COMMIT');
       return withLikes(rowToMessage(inserted.rows[0]), false, 0);
@@ -691,6 +732,36 @@ class PostgresChatStore {
       created,
       sent: true,
     };
+  }
+
+  async markRead(conversationId: string, userId: string): Promise<void> {
+    await this.assertMember(this.pool, conversationId, userId);
+    await this.pool.query(
+      `UPDATE conversations
+       SET user_a_last_read_at = CASE WHEN user_a_id = $2 THEN now() ELSE user_a_last_read_at END,
+           user_b_last_read_at = CASE WHEN user_b_id = $2 THEN now() ELSE user_b_last_read_at END,
+           updated_at = now()
+       WHERE id = $1`,
+      [conversationId, userId],
+    );
+  }
+
+  async countUnread(userId: string): Promise<number> {
+    const result = await this.pool.query(
+      `SELECT COUNT(*)::int AS n
+       FROM conversations c
+       WHERE (c.user_a_id = $1 OR c.user_b_id = $1)
+         AND c.last_message_at IS NOT NULL
+         AND c.last_message_sender_id IS NOT NULL
+         AND c.last_message_sender_id <> $1
+         AND (
+           (c.user_a_id = $1 AND (c.user_a_last_read_at IS NULL OR c.last_message_at > c.user_a_last_read_at))
+           OR
+           (c.user_b_id = $1 AND (c.user_b_last_read_at IS NULL OR c.last_message_at > c.user_b_last_read_at))
+         )`,
+      [userId],
+    );
+    return Number(result.rows[0]?.n ?? 0);
   }
 }
 

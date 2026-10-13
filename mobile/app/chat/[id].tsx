@@ -24,6 +24,7 @@ import {
 import { apiFetch, apiUploadMedia } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { resolveMediaUrl } from '@/lib/mediaUrl';
+import { markConversationRead } from '@/lib/useChatUnread';
 import { useSafetyActions } from '@/lib/useSafetyActions';
 import type { ConversationSummary, PublicMessage } from '@/lib/types';
 
@@ -70,6 +71,7 @@ export default function ChatThreadScreen() {
       ]);
       setConversation(meta.conversation);
       setMessages(normalizeMessages(msgs.messages ?? []));
+      void markConversationRead(accessToken, meta.conversation.id);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load chat');

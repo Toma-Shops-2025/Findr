@@ -153,8 +153,9 @@ export const geoRoutes: FastifyPluginAsync = async (app) => {
 
       const lastActive = profile?.lastActiveAt
         ? Date.parse(profile.lastActiveAt)
-        : Date.parse(loc.updatedAt);
-      const online = lastActive > 0 && Date.now() - lastActive < 15 * 60 * 1000;
+        : 0;
+      const online =
+        lastActive > 0 && Date.now() - lastActive < 15 * 60 * 1000;
 
       results.push({
         userId: loc.userId,

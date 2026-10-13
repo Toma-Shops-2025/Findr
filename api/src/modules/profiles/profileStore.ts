@@ -110,6 +110,13 @@ class MemoryProfileStore {
     existing.updatedAt = existing.lastActiveAt;
   }
 
+  async clearActive(userId: string): Promise<void> {
+    const existing = this.byUserId.get(userId);
+    if (!existing) return;
+    existing.lastActiveAt = null;
+    existing.updatedAt = nowIso();
+  }
+
   /** Hide + scrub profile fields after account deletion. */
   async scrubDeleted(userId: string): Promise<void> {
     const existing = this.byUserId.get(userId);
@@ -224,6 +231,14 @@ class PostgresProfileStore {
   async touchActive(userId: string): Promise<void> {
     await this.pool.query(
       `UPDATE profiles SET last_active_at = now(), updated_at = now()
+       WHERE user_id = $1`,
+      [userId],
+    );
+  }
+
+  async clearActive(userId: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE profiles SET last_active_at = NULL, updated_at = now()
        WHERE user_id = $1`,
       [userId],
     );

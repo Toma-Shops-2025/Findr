@@ -4,6 +4,9 @@ export type ConversationRecord = {
   userBId: string;
   lastMessagePreview: string | null;
   lastMessageAt: string | null;
+  lastMessageSenderId: string | null;
+  userALastReadAt: string | null;
+  userBLastReadAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -43,6 +46,7 @@ export type ConversationSummary = {
   lastMessagePreview: string | null;
   lastMessageAt: string | null;
   updatedAt: string;
+  hasUnread: boolean;
 };
 
 export type PublicMessage = {

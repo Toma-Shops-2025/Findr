@@ -3,7 +3,10 @@ import { z } from 'zod';
 
 import { requireAuth } from '../modules/auth/requireAuth.js';
 import { getUserStore } from '../modules/auth/userStore.js';
-import { getChatStore } from '../modules/chat/chatStore.js';
+import {
+  conversationHasUnread,
+  getChatStore,
+} from '../modules/chat/chatStore.js';
 import type {
   ConversationRecord,
   ConversationSummary,
@@ -65,6 +68,7 @@ async function toSummary(
     lastMessagePreview: conversation.lastMessagePreview,
     lastMessageAt: conversation.lastMessageAt,
     updatedAt: conversation.updatedAt,
+    hasUnread: conversationHasUnread(conversation, me),
   };
 }
 
@@ -201,6 +205,29 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       error: 'not_implemented',
       message: 'TODO: issue chat vendor token for current user',
     });
+  });
+
+  app.get('/unread-count', async (req, reply) => {
+    const auth = await requireAuth(req, reply);
+    if (!auth) return;
+    const store = await getChatStore();
+    const count = await store.countUnread(auth.userId);
+    return { count };
+  });
+
+  app.post('/conversations/:id/read', async (req, reply) => {
+    const auth = await requireAuth(req, reply);
+    if (!auth) return;
+    const { id } = req.params as { id: string };
+    const resolved = await resolveConversationForUser(auth.userId, id);
+    if (!resolved.ok) {
+      return reply
+        .code(resolved.status)
+        .send({ error: resolved.error, message: resolved.message });
+    }
+    const store = await getChatStore();
+    await store.markRead(resolved.conversation.id, auth.userId);
+    return { ok: true };
   });
 
   app.get('/conversations', async (req, reply) => {

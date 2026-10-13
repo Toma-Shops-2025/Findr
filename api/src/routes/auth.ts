@@ -194,8 +194,11 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.post('/logout', async (_req, reply) => {
-    // Stateless JWT â€” client clears SecureStore. Endpoint kept for symmetry / future revoke list.
+  app.post('/logout', async (req, reply) => {
+    const auth = await requireAuth(req, reply);
+    if (!auth) return;
+    const profiles = await getProfileStore();
+    await profiles.clearActive(auth.userId);
     return reply.send({ ok: true });
   });
 

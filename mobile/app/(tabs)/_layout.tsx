@@ -1,8 +1,9 @@
 import { Tabs } from 'expo-router';
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { TabBarSymbol } from '@/components/TabBarSymbol';
 import { colors, typography } from '@/constants/theme';
+import { useChatUnreadCount } from '@/lib/useChatUnread';
 
 function TabLabel({ label, focused }: { label: string; focused: boolean }) {
   return (
@@ -19,6 +20,8 @@ function TabLabel({ label, focused }: { label: string; focused: boolean }) {
 }
 
 export default function TabsLayout() {
+  const unreadChats = useChatUnreadCount();
+
   return (
     <Tabs
       screenOptions={{
@@ -47,8 +50,12 @@ export default function TabsLayout() {
         name="chats"
         options={{
           title: 'Chats',
+          tabBarBadge: unreadChats > 0 ? unreadChats : undefined,
           tabBarIcon: ({ color, size }) => (
-            <TabBarSymbol id="chats" color={color} size={size} />
+            <View>
+              <TabBarSymbol id="chats" color={color} size={size} />
+              {unreadChats > 0 ? <View style={tabBadgeDot} /> : null}
+            </View>
           ),
           tabBarLabel: ({ focused }) => <TabLabel label="Chats" focused={focused} />,
         }}
@@ -76,3 +83,15 @@ export default function TabsLayout() {
     </Tabs>
   );
 }
+
+const tabBadgeDot = {
+  position: 'absolute' as const,
+  top: -2,
+  right: -4,
+  width: 9,
+  height: 9,
+  borderRadius: 5,
+  backgroundColor: colors.coral,
+  borderWidth: 1,
+  borderColor: colors.inkElevated,
+};

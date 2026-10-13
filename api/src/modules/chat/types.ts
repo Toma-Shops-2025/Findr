@@ -47,6 +47,8 @@ export type ConversationSummary = {
   lastMessageAt: string | null;
   updatedAt: string;
   hasUnread: boolean;
+  /** e.g. "2 miles away" when peer shares location; null when hidden or unknown. */
+  peerDistanceLabel: string | null;
 };
 
 export type PublicMessage = {

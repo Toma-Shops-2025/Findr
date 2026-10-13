@@ -16,6 +16,7 @@ export type PublicProfile = {
   photoUrls: string[];
   age: number | null;
   isVisible: boolean;
+  shareChatDistance: boolean;
   lastActiveAt: string | null;
   updatedAt: string;
   exists: boolean;
@@ -41,6 +42,7 @@ export type ProfileUpdateInput = {
   photoUrls?: string[];
   age?: number | null;
   isVisible?: boolean;
+  shareChatDistance?: boolean;
 };
 
 export const LOOKING_FOR_OPTIONS: LookingFor[] = [
@@ -61,6 +63,7 @@ export type ConversationSummary = {
   lastMessageAt: string | null;
   updatedAt: string;
   hasUnread?: boolean;
+  peerDistanceLabel?: string | null;
 };
 
 /** Approximate pin shared in chat (~100m / 3 decimal places by default). */

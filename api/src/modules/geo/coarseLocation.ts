@@ -33,6 +33,19 @@ export function formatDistanceBand(meters: number): string {
   return `~${Math.round(miles)} mi`;
 }
 
+/** Grindr-style chat subtitle: feet under 1 mi, else miles. */
+export function formatChatDistanceLabel(meters: number): string {
+  const miles = meters / 1609.344;
+  if (miles < 1) {
+    const feet = Math.max(1, Math.round(meters * 3.28084));
+    return `${feet} feet away`;
+  }
+  const display =
+    miles < 10 ? Math.round(miles * 10) / 10 : Math.round(miles);
+  const unit = display === 1 ? 'mile' : 'miles';
+  return `${display} ${unit} away`;
+}
+
 export type CoarseLocation = {
   userId: string;
   latitude: number;

@@ -89,10 +89,17 @@ export default function ChatThreadScreen() {
     const timer = setInterval(() => {
       void (async () => {
         try {
-          const msgs = await apiFetch<{ messages: PublicMessage[] }>(
-            `/chat/conversations/${id}/messages?limit=100`,
-            { token: accessToken },
-          );
+          const [meta, msgs] = await Promise.all([
+            apiFetch<{ conversation: ConversationSummary }>(
+              `/chat/conversations/${id}`,
+              { token: accessToken },
+            ),
+            apiFetch<{ messages: PublicMessage[] }>(
+              `/chat/conversations/${id}/messages?limit=100`,
+              { token: accessToken },
+            ),
+          ]);
+          setConversation(meta.conversation);
           setMessages(normalizeMessages(msgs.messages ?? []));
         } catch {
           // Keep last good state while offline briefly.
@@ -326,7 +333,18 @@ export default function ChatThreadScreen() {
     >
       <Stack.Screen
         options={{
-          title: conversation?.peerDisplayName ?? 'Chat',
+          headerTitle: () => (
+            <View style={styles.headerTitleWrap}>
+              <Text style={styles.headerTitle} numberOfLines={1}>
+                {conversation?.peerDisplayName ?? 'Chat'}
+              </Text>
+              {conversation?.peerDistanceLabel ? (
+                <Text style={styles.headerDistance} numberOfLines={1}>
+                  {conversation.peerDistanceLabel}
+                </Text>
+              ) : null}
+            </View>
+          ),
         }}
       />
       {reportModals}
@@ -480,6 +498,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.ink,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerTitleWrap: {
+    alignItems: 'flex-start',
+    maxWidth: 220,
+  },
+  headerTitle: {
+    fontFamily: typography.heading,
+    fontSize: 17,
+    color: colors.mist,
+  },
+  headerDistance: {
+    fontFamily: typography.body,
+    fontSize: 13,
+    color: colors.mistMuted,
+    marginTop: 2,
   },
   headerActions: {
     flexDirection: 'row',

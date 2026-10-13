@@ -36,6 +36,7 @@ export default function ProfileScreen() {
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [ageText, setAgeText] = useState('');
   const [isVisible, setIsVisible] = useState(true);
+  const [shareChatDistance, setShareChatDistance] = useState(true);
   const [age, setAge] = useState<number | null>(null);
 
   const applyProfile = useCallback((p: PublicProfile) => {
@@ -47,6 +48,7 @@ export default function ProfileScreen() {
     setLookingFor(p.lookingFor || []);
     setPhotoUrls(p.photoUrls || []);
     setIsVisible(p.isVisible !== false);
+    setShareChatDistance(p.shareChatDistance !== false);
     setAge(p.age != null ? p.age : null);
     setAgeText(p.age != null ? String(p.age) : '');
   }, []);
@@ -226,6 +228,7 @@ export default function ProfileScreen() {
         lookingFor,
         photoUrls,
         isVisible,
+        shareChatDistance,
         age: agePayload,
       };
       if (agePayload === undefined) delete body.age;
@@ -365,6 +368,21 @@ export default function ProfileScreen() {
           value={isVisible}
           onValueChange={onToggleVisibility}
           disabled={visibilitySaving}
+          trackColor={{ false: colors.border, true: colors.teal }}
+          thumbColor={colors.mist}
+        />
+      </View>
+      <View style={styles.row}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.label}>Distance in chat</Text>
+          <Text style={styles.metaInline}>
+            Let others see how far you are in 1:1 chat |{' '}
+            {shareChatDistance ? 'On' : 'Off'}
+          </Text>
+        </View>
+        <Switch
+          value={shareChatDistance}
+          onValueChange={setShareChatDistance}
           trackColor={{ false: colors.border, true: colors.teal }}
           thumbColor={colors.mist}
         />

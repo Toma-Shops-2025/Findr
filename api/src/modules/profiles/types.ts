@@ -26,6 +26,8 @@ export type ProfileRecord = {
   /** Profile-declared age (preferred for display). Null until set on profile edit. */
   age: number | null;
   isVisible: boolean;
+  /** When false, others do not see your distance in chat. */
+  shareChatDistance: boolean;
   lastActiveAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -44,6 +46,7 @@ export type ProfileUpdateInput = {
   /** When set, must be >= 18 (server-validated). */
   age?: number | null;
   isVisible?: boolean;
+  shareChatDistance?: boolean;
 };
 
 export type PublicProfile = {
@@ -61,6 +64,7 @@ export type PublicProfile = {
    */
   age: number | null;
   isVisible: boolean;
+  shareChatDistance: boolean;
   lastActiveAt: string | null;
   updatedAt: string;
   exists: boolean;

@@ -15,6 +15,7 @@ import type {
 } from '../modules/chat/types.js';
 import { sanitizeDisplayNameForPublic } from '../modules/profiles/publicDisplay.js';
 import { getProfileStore } from '../modules/profiles/profileStore.js';
+import { peerChatDistanceLabel } from '../modules/geo/peerChatDistance.js';
 import { getBlockStore } from '../modules/safety/blockStore.js';
 
 /**
@@ -56,9 +57,10 @@ async function toSummary(
   me: string,
 ): Promise<ConversationSummary> {
   const other = peerId(conversation, me);
-  const [displayName, photoUrl] = await Promise.all([
+  const [displayName, photoUrl, distanceLabel] = await Promise.all([
     peerDisplayName(other),
     peerPhotoUrl(other),
+    peerChatDistanceLabel(me, other),
   ]);
   return {
     id: conversation.id,
@@ -69,6 +71,7 @@ async function toSummary(
     lastMessageAt: conversation.lastMessageAt,
     updatedAt: conversation.updatedAt,
     hasUnread: conversationHasUnread(conversation, me),
+    peerDistanceLabel: distanceLabel,
   };
 }
 

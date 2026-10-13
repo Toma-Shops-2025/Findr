@@ -46,6 +46,7 @@ const updateSchema = z
       .nullable()
       .optional(),
     isVisible: z.boolean().optional(),
+    shareChatDistance: z.boolean().optional(),
   })
   .refine(
     (body) =>
@@ -57,7 +58,8 @@ const updateSchema = z
       body.lookingFor !== undefined ||
       body.photoUrls !== undefined ||
       body.age !== undefined ||
-      body.isVisible !== undefined,
+      body.isVisible !== undefined ||
+      body.shareChatDistance !== undefined,
     { message: 'at least one profile field is required' },
   );
 
@@ -87,6 +89,7 @@ function toPublicProfile(
       photoUrls: [],
       age,
       isVisible: true,
+      shareChatDistance: true,
       lastActiveAt: null,
       updatedAt: new Date().toISOString(),
       exists: false,
@@ -103,6 +106,7 @@ function toPublicProfile(
     photoUrls: record.photoUrls,
     age,
     isVisible: record.isVisible,
+    shareChatDistance: record.shareChatDistance,
     lastActiveAt: record.lastActiveAt,
     updatedAt: record.updatedAt,
     exists: true,
@@ -165,6 +169,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
       photoUrls?: string[];
       age?: number | null;
       isVisible?: boolean;
+      shareChatDistance?: boolean;
     } = {};
     if (parsed.data.displayName !== undefined) {
       update.displayName = parsed.data.displayName;
@@ -190,6 +195,9 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     }
     if (parsed.data.isVisible !== undefined) {
       update.isVisible = parsed.data.isVisible;
+    }
+    if (parsed.data.shareChatDistance !== undefined) {
+      update.shareChatDistance = parsed.data.shareChatDistance;
     }
     const record = await store.upsert(auth.userId, update);
 

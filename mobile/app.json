@@ -16,7 +16,7 @@
     },
     "android": {
       "package": "app.findr.mobile",
-      "versionCode": 32,
+      "versionCode": 33,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",

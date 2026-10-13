@@ -43,6 +43,9 @@ function rowToProfile(row: Record<string, unknown>): ProfileRecord {
     photoUrls: asStringArray(row.photo_urls),
     age: asAge(row.age),
     isVisible: Boolean(row.is_visible ?? true),
+    shareChatDistance: row.share_chat_distance === undefined
+      ? true
+      : Boolean(row.share_chat_distance),
     lastActiveAt:
       row.last_active_at instanceof Date
         ? row.last_active_at.toISOString()
@@ -89,6 +92,8 @@ class MemoryProfileStore {
       photoUrls: input.photoUrls ?? existing?.photoUrls ?? [],
       age: nextAge,
       isVisible: input.isVisible ?? existing?.isVisible ?? true,
+      shareChatDistance:
+        input.shareChatDistance ?? existing?.shareChatDistance ?? true,
       lastActiveAt: stamp,
       createdAt: existing?.createdAt ?? stamp,
       updatedAt: stamp,
@@ -145,7 +150,8 @@ class PostgresProfileStore {
     const result = await this.pool.query(
       `SELECT user_id, display_name, bio, gender_identity,
               orientations_shown, orientations_seeking, looking_for,
-              photo_urls, age, is_visible, last_active_at, created_at, updated_at
+              photo_urls, age, is_visible, share_chat_distance,
+              last_active_at, created_at, updated_at
        FROM profiles
        WHERE user_id = $1
        LIMIT 1`,
@@ -172,6 +178,8 @@ class PostgresProfileStore {
     const lookingFor = input.lookingFor ?? existing?.lookingFor ?? [];
     const photoUrls = input.photoUrls ?? existing?.photoUrls ?? [];
     const isVisible = input.isVisible ?? existing?.isVisible ?? true;
+    const shareChatDistance =
+      input.shareChatDistance ?? existing?.shareChatDistance ?? true;
     const displayName =
       input.displayName !== undefined
         ? input.displayName.trim()
@@ -181,9 +189,9 @@ class PostgresProfileStore {
       `INSERT INTO profiles (
          user_id, display_name, bio, gender_identity,
          orientations_shown, orientations_seeking, looking_for,
-         photo_urls, age, is_visible, last_active_at, updated_at
+         photo_urls, age, is_visible, share_chat_distance, last_active_at, updated_at
        ) VALUES (
-         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), now()
+         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), now()
        )
        ON CONFLICT (user_id) DO UPDATE SET
          display_name = EXCLUDED.display_name,
@@ -195,11 +203,13 @@ class PostgresProfileStore {
          photo_urls = EXCLUDED.photo_urls,
          age = EXCLUDED.age,
          is_visible = EXCLUDED.is_visible,
+         share_chat_distance = EXCLUDED.share_chat_distance,
          last_active_at = now(),
          updated_at = now()
        RETURNING user_id, display_name, bio, gender_identity,
                  orientations_shown, orientations_seeking, looking_for,
-                 photo_urls, age, is_visible, last_active_at, created_at, updated_at`,
+                 photo_urls, age, is_visible, share_chat_distance,
+                 last_active_at, created_at, updated_at`,
       [
         userId,
         displayName,
@@ -211,6 +221,7 @@ class PostgresProfileStore {
         photoUrls,
         age,
         isVisible,
+        shareChatDistance,
       ],
     );
     return rowToProfile(result.rows[0]);
@@ -220,7 +231,8 @@ class PostgresProfileStore {
     const result = await this.pool.query(
       `SELECT user_id, display_name, bio, gender_identity,
               orientations_shown, orientations_seeking, looking_for,
-              photo_urls, age, is_visible, last_active_at, created_at, updated_at
+              photo_urls, age, is_visible, share_chat_distance,
+              last_active_at, created_at, updated_at
        FROM profiles
        WHERE is_visible = TRUE AND user_id <> $1`,
       [excludeUserId],

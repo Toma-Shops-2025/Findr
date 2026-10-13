@@ -3,7 +3,7 @@
     "name": "Findr",
     "slug": "findr",
     "version": "0.1.0",
-    "icon": "./assets/images/android-icon-foreground.png",
+    "icon": "./assets/images/findr-logo.png",
     "scheme": "findr",
     "userInterfaceStyle": "dark",
     "ios": {
@@ -16,7 +16,7 @@
     },
     "android": {
       "package": "app.findr.mobile",
-      "versionCode": 31,
+      "versionCode": 32,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
@@ -26,10 +26,8 @@
         "RECORD_AUDIO"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#12151C",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/images/findr-logo.png"
       },
       "predictiveBackGestureEnabled": false,
       "softwareKeyboardLayoutMode": "resize"
@@ -53,9 +51,9 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/android-icon-foreground.png",
+          "image": "./assets/images/findr-logo.png",
           "resizeMode": "contain",
-          "backgroundColor": "#12151C"
+          "backgroundColor": "#000000"
         }
       ],
       "expo-secure-store",

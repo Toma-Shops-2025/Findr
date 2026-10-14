@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -70,6 +70,11 @@ export default function ChatsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const lastFetchedAtRef = useRef(0);
+  const loadRef = useRef<(isRefresh?: boolean) => Promise<void>>(() =>
+    Promise.resolve(),
+  );
+  const CHATS_STALE_MS = 60_000;
 
   const load = useCallback(
     async (isRefresh = false) => {
@@ -88,6 +93,7 @@ export default function ChatsScreen() {
           { token: accessToken },
         );
         setThreads(data.conversations ?? []);
+        lastFetchedAtRef.current = Date.now();
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Could not load chats');
         setThreads([]);
@@ -99,10 +105,15 @@ export default function ChatsScreen() {
     [accessToken],
   );
 
+  loadRef.current = load;
+
   useFocusEffect(
     useCallback(() => {
-      load();
-    }, [load]),
+      const stale = Date.now() - lastFetchedAtRef.current > CHATS_STALE_MS;
+      if (lastFetchedAtRef.current === 0 || stale) {
+        void loadRef.current(lastFetchedAtRef.current > 0);
+      }
+    }, [accessToken]),
   );
 
   const listHeader = error ? (

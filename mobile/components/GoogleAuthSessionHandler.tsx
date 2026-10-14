@@ -1,34 +1,51 @@
 import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
+import { InteractionManager } from 'react-native';
 
-import { idTokenFromGoogleResponse, useGoogleAuthRequest } from '@/lib/googleAuth';
+import { idTokenFromGoogleResponse } from '@/lib/googleAuth';
+import {
+  googleAuthErrorMessage,
+  setLastGoogleAuthError,
+} from '@/lib/googleAuthErrors';
+import { useGoogleAuthSession } from '@/lib/googleAuthContext';
 import { useAuth } from '@/lib/auth';
 
 /**
- * Must stay mounted while Google OAuth runs. If only Login mounts the hook,
- * Android deep-link to /oauth2redirect unmounts Login and the id token is lost.
+ * Finishes Google OAuth using the same auth-request instance that opened the browser.
  */
 export function GoogleAuthSessionHandler() {
   const { loginWithGoogle, accessToken } = useAuth();
-  const { response } = useGoogleAuthRequest();
+  const { response } = useGoogleAuthSession();
   const finishingRef = useRef(false);
+  const pendingNavRef = useRef(false);
 
   useEffect(() => {
     const token = idTokenFromGoogleResponse(response);
     if (!token || accessToken || finishingRef.current) return;
 
     finishingRef.current = true;
+    setLastGoogleAuthError(null);
     void loginWithGoogle(token)
       .then(() => {
-        router.replace('/(tabs)/nearby');
+        pendingNavRef.current = true;
       })
-      .catch(() => {
+      .catch((err) => {
+        setLastGoogleAuthError(googleAuthErrorMessage(err));
         router.replace('/(auth)/login');
       })
       .finally(() => {
         finishingRef.current = false;
       });
   }, [response, accessToken, loginWithGoogle]);
+
+  useEffect(() => {
+    if (!pendingNavRef.current || !accessToken) return;
+    pendingNavRef.current = false;
+    const task = InteractionManager.runAfterInteractions(() => {
+      router.replace('/(tabs)/nearby');
+    });
+    return () => task.cancel();
+  }, [accessToken]);
 
   return null;
 }

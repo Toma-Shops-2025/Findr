@@ -40,9 +40,14 @@ Google **sign-up and sign-in are the same** flow: first Google login creates the
 ## Still says "RewardLoop" or Error 400?
 
 1. **[OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent)** → **App name** must be **Findr** (Google shows this name on the sign-in page).
-2. **Findr Android** client → package `app.findr.mobile` + EAS **and** Play **app signing** SHA-1 fingerprints.
-3. **Findr Web** client → **Authorized redirect URIs** must include (use your Android client id prefix):
-
-   `com.googleusercontent.apps.155868445533-768bbg1kd7mrtuqlgd7kmbmdji79sr7m:/oauth2redirect`
-
+2. **Findr Android** client (type **Android**, not Web) → package `app.findr.mobile` + EAS **and** Play **app signing** SHA-1 fingerprints. There is **no** “Authorized redirect URIs” field on the Android client — that is normal.
+3. **Findr Web** client → **Authorized redirect URIs** may only use **`https://`** (Google will reject `com.googleusercontent.apps...`). For Play-store builds you usually **do not** add the `com.googleusercontent...` URI here. Optional for Expo Go only: `https://auth.expo.io/@tomas_empire/findr`. The native redirect is handled by the **Android client + SHA-1** and the app’s intent filter (versionCode **37+**).
 4. Install a **new** Play build after any `app.json` / client id change (versionCode **37+** includes the Android intent filter for Google redirect).
+
+### Do not paste this into “Web” redirect URIs
+
+Google will show **“Invalid Redirect: must use either http or https”** if you try:
+
+`com.googleusercontent.apps.155868445533-768bbg1kd7mrtuqlgd7kmbmdji79sr7m:/oauth2redirect`
+
+**Delete that row** on the Web client. It belongs in the **app** (intent filter), not in Web redirect URIs.

@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
  * Apply all db/migrations/*.sql not yet recorded in schema_migrations.
- *
- * Usage:
- *   cd api && $env:DATABASE_URL="..." && node ../db/scripts/apply-pending-migrations.mjs
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { connectWithRetry, pgPoolOptions } from './pgPool.mjs';
+import { seedLegacyMigrations } from './legacyMigrationSeed.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..', '..');
@@ -22,7 +22,6 @@ if (!existsSync(apiPkg)) {
 
 const require = createRequire(apiPkg);
 const pg = require('pg');
-const { pgPoolOptions } = await import('./pgConfig.mjs');
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -49,9 +48,10 @@ async function appliedNames(client) {
   return new Set(res.rows.map((r) => String(r.name)));
 }
 
-const client = await pool.connect();
+const client = await connectWithRetry(pool);
 try {
   await ensureTrackingTable(client);
+  await seedLegacyMigrations(client);
   const applied = await appliedNames(client);
 
   for (const file of files) {

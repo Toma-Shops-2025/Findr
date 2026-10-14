@@ -48,7 +48,7 @@ if (!databaseUrl) {
 const sqlPath = resolve(process.cwd(), fileArg);
 const sql = readFileSync(sqlPath, 'utf8');
 
-const { pgPoolOptions } = await import('./pgConfig.mjs');
+const { pgPoolOptions } = await import('./pgPool.mjs');
 const pool = new pg.Pool(pgPoolOptions(databaseUrl));
 const migrationName = fileArg.replace(/^.*[\\/]/, '');
 try {

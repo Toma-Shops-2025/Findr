@@ -19,7 +19,7 @@ const apiPkg = resolve(repoRoot, 'api', 'package.json');
 
 const require = createRequire(apiPkg);
 const pg = require('pg');
-const { pgPoolOptions } = await import('./pgConfig.mjs');
+const { pgPoolOptions } = await import('./pgPool.mjs');
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {

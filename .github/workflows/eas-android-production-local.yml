@@ -35,6 +35,9 @@ jobs:
         run: npm ci
 
       - name: EAS local production build
+        env:
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8
+          JAVA_TOOL_OPTIONS: -Xmx4g
         run: eas build -p android --profile production --local --non-interactive
 
       - name: Upload AAB artifact

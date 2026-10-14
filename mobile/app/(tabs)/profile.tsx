@@ -2,6 +2,7 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Switch,
@@ -23,6 +24,7 @@ import { LOOKING_FOR_OPTIONS, type LookingFor, type PublicProfile } from '@/lib/
 export default function ProfileScreen() {
   const { accessToken } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [visibilitySaving, setVisibilitySaving] = useState(false);
@@ -53,9 +55,10 @@ export default function ProfileScreen() {
     setAgeText(p.age != null ? String(p.age) : '');
   }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (isRefresh = false) => {
     if (!accessToken) return;
-    setLoading(true);
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
     setError(null);
     try {
       const data = await apiFetch<{ profile: PublicProfile }>('/profiles/me', {
@@ -66,6 +69,7 @@ export default function ProfileScreen() {
       setError(err instanceof Error ? err.message : 'Failed to load profile');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [accessToken, applyProfile]);
 
@@ -261,6 +265,14 @@ export default function ProfileScreen() {
       style={styles.container}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => void load(true)}
+          tintColor={colors.coral}
+          colors={[colors.coral]}
+        />
+      }
     >
       <ProfilePhotoGallery
         photoUrls={photoUrls}

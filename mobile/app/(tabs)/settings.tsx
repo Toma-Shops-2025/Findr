@@ -204,10 +204,11 @@ export default function SettingsScreen() {
         <RefreshControl
           refreshing={refreshing}
           onRefresh={() => {
-            loadBlocks(true);
-            loadVisibility();
+            void loadBlocks(true);
+            void loadVisibility();
           }}
           tintColor={colors.coral}
+          colors={[colors.coral]}
         />
       }
     >
@@ -338,6 +339,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.ink,
   },
   content: {
+    flexGrow: 1,
     padding: spacing.lg,
     gap: spacing.sm,
   },

@@ -109,6 +109,7 @@ export default function NearbyScreen() {
       if (!accessToken) {
         setError('Sign in to see people nearby.');
         setLoading(false);
+        setRefreshing(false);
         return;
       }
 
@@ -218,8 +219,8 @@ export default function NearbyScreen() {
     void loadNearby(true);
   }, [onlineOnly, favoritesOnly]);
 
-  return (
-    <View style={styles.container}>
+  const listHeader = (
+    <>
       <Text style={styles.brand}>Findr</Text>
       <Text style={styles.sub}>Nearby — sorted by distance (fresh ~6h)</Text>
       <View style={styles.filterRow}>
@@ -253,40 +254,54 @@ export default function NearbyScreen() {
           </Pressable>
         </View>
       ) : null}
+    </>
+  );
 
-      {!error && items.length === 0 ? (
-        <View style={styles.stateBox}>
-          <Text style={styles.emptyTitle}>Nobody nearby yet</Text>
-          <Text style={styles.emptyBody}>
-            You are the only visible person in this area right now. Pull to
-            refresh after friends join.
-          </Text>
-          <Pressable style={styles.retry} onPress={() => loadNearby(true)}>
-            <Text style={styles.retryText}>Refresh</Text>
-          </Pressable>
-        </View>
-      ) : null}
-
-      {loading && items.length === 0 ? (
+  const listEmpty = (
+    <View style={styles.stateBox}>
+      {loading && items.length === 0 && !refreshing ? (
         <View style={styles.inlineLoad}>
           <ActivityIndicator color={colors.coral} />
           <Text style={styles.sub}>
             {initialLoad ? 'Finding people near you…' : 'Refreshing…'}
           </Text>
         </View>
+      ) : !error ? (
+        <>
+          <Text style={styles.emptyTitle}>Nobody nearby yet</Text>
+          <Text style={styles.emptyBody}>
+            You are the only visible person in this area right now. Pull down
+            to refresh after friends join.
+          </Text>
+          <Pressable style={styles.retry} onPress={() => loadNearby(true)}>
+            <Text style={styles.retryText}>Refresh</Text>
+          </Pressable>
+        </>
       ) : null}
+    </View>
+  );
 
+  return (
+    <View style={styles.container}>
       <FlatList
+        style={styles.listFlex}
         data={items}
         keyExtractor={(item) => item.userId}
         numColumns={3}
         columnWrapperStyle={styles.row}
-        contentContainerStyle={styles.list}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={listEmpty}
+        contentContainerStyle={[
+          styles.list,
+          (items.length === 0 || loading) && styles.listGrow,
+        ]}
+        alwaysBounceVertical
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadNearby(true)}
             tintColor={colors.coral}
+            colors={[colors.coral]}
           />
         }
         renderItem={({ item }) => (
@@ -435,12 +450,19 @@ const styles = StyleSheet.create({
     color: colors.coral,
     fontSize: 14,
   },
+  listFlex: {
+    flex: 1,
+  },
   list: {
     paddingHorizontal: spacing.sm,
     paddingBottom: spacing.xl,
     paddingTop: spacing.xs,
   },
+  listGrow: {
+    flexGrow: 1,
+  },
   row: {
+    flexDirection: 'row',
     gap: spacing.sm,
     marginBottom: spacing.sm,
   },

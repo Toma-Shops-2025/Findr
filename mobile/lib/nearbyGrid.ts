@@ -9,7 +9,8 @@ export const NEARBY_RADIUS_KM = NEARBY_RADIUS_MILES * 1.609344;
 /** Close band pinned above the separator (Grindr-style top grid). */
 export const NEARBY_CLOSE_SECTION_MILES = 10;
 
-export const NEARBY_FETCH_LIMIT = 100;
+/** Balance grid richness vs. decode/render cost on mid-range Android. */
+export const NEARBY_FETCH_LIMIT = 60;
 
 const CLOSE_SECTION_METERS = NEARBY_CLOSE_SECTION_MILES * 1609.344;
 

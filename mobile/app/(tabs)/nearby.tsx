@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -23,6 +23,10 @@ import {
   buildNearbyGridRows,
   type NearbyGridRow,
 } from '@/lib/nearbyGrid';
+import {
+  readCachedCoords,
+  writeCachedCoords,
+} from '@/lib/nearbyCoordsCache';
 import type { NearbyCard } from '@/lib/types';
 
 type NearbyResponse = {
@@ -35,6 +39,11 @@ type Coords = { latitude: number; longitude: number; accuracyM?: number };
 
 /** Show the green privacy line once per app session (not every refresh). */
 let privacyFuzzNoteShown = false;
+
+/** Tab refocus: skip full reload if we fetched recently. */
+const NEARBY_LIST_STALE_MS = 90_000;
+
+type LoadNearbyMode = 'initial' | 'refresh' | 'silent';
 
 async function resolveConsentedCoords(): Promise<{
   coords: Coords;
@@ -82,7 +91,7 @@ async function resolveConsentedCoords(): Promise<{
   }
 }
 
-function NearbyCardCell({
+const NearbyCardCell = memo(function NearbyCardCell({
   item,
   onToggleFavorite,
 }: {
@@ -99,7 +108,10 @@ function NearbyCardCell({
         {item.online ? <View style={styles.onlineDot} /> : null}
         <Pressable
           style={styles.favBtn}
-          onPress={() => onToggleFavorite(item)}
+          onPress={(e) => {
+            e.stopPropagation();
+            onToggleFavorite(item);
+          }}
           hitSlop={8}
         >
           <Text style={styles.favIcon}>
@@ -116,9 +128,9 @@ function NearbyCardCell({
       </Text>
     </Pressable>
   );
-}
+});
 
-function NearbyPhoto({ item }: { item: NearbyCard }) {
+const NearbyPhoto = memo(function NearbyPhoto({ item }: { item: NearbyCard }) {
   const uri = primaryPhotoUrl(item.photoUrls);
   const [failed, setFailed] = useState(false);
   const initial = (item.displayName?.[0] || '?').toUpperCase();
@@ -133,7 +145,7 @@ function NearbyPhoto({ item }: { item: NearbyCard }) {
     );
   }
   return <Text style={styles.initial}>{initial}</Text>;
-}
+});
 
 export default function NearbyScreen() {
   const { accessToken } = useAuth();
@@ -146,8 +158,16 @@ export default function NearbyScreen() {
   const [onlineOnly, setOnlineOnly] = useState(false);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
 
+  const lastFetchedAtRef = useRef(0);
+  const hasGridDataRef = useRef(false);
+  const loadInFlightRef = useRef<Promise<void> | null>(null);
+  const loadNearbyRef = useRef<
+    (mode?: LoadNearbyMode, forceGps?: boolean) => Promise<void>
+  >(() => Promise.resolve());
+  const skipFilterEffectRef = useRef(true);
+
   const loadNearby = useCallback(
-    async (isRefresh = false) => {
+    async (mode: LoadNearbyMode = 'initial', forceGps = false) => {
       if (!accessToken) {
         setError('Sign in to see people nearby.');
         setLoading(false);
@@ -155,13 +175,40 @@ export default function NearbyScreen() {
         return;
       }
 
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
-      setError(null);
+      if (
+        mode === 'silent' &&
+        hasGridDataRef.current &&
+        Date.now() - lastFetchedAtRef.current < NEARBY_LIST_STALE_MS
+      ) {
+        return;
+      }
+
+      if (loadInFlightRef.current) {
+        return loadInFlightRef.current;
+      }
+
+      const run = async () => {
+        if (mode === 'refresh') setRefreshing(true);
+        else if (mode !== 'silent' && !hasGridDataRef.current) setLoading(true);
+        setError(null);
 
       try {
-        const { coords, source, permissionDenied } =
-          await resolveConsentedCoords();
+        let coords: Coords;
+        let source: 'gps' | 'demo' | 'cached';
+        let permissionDenied = false;
+
+        const cached = !forceGps ? readCachedCoords() : null;
+        if (cached) {
+          coords = cached;
+          source = 'cached';
+        } else {
+          const resolved = await resolveConsentedCoords();
+          coords = resolved.coords;
+          source = resolved.source;
+          permissionDenied = resolved.permissionDenied;
+          writeCachedCoords(coords);
+        }
+
         const fuzzed = fuzzLatLng(coords.latitude, coords.longitude);
 
         const body: {
@@ -195,7 +242,10 @@ export default function NearbyScreen() {
             body: JSON.stringify(body),
           }).catch(() => undefined),
         ]);
-        setItems(data.results || []);
+        const next = data.results || [];
+        setItems(next);
+        hasGridDataRef.current = next.length > 0;
+        lastFetchedAtRef.current = Date.now();
 
         const notes: string[] = [];
         if (permissionDenied) {
@@ -204,6 +254,8 @@ export default function NearbyScreen() {
           );
         } else if (source === 'demo') {
           notes.push('GPS unavailable - using demo area.');
+        } else if (source === 'cached') {
+          // No extra note — avoids re-rendering header every refocus.
         } else if (!privacyFuzzNoteShown) {
           privacyFuzzNoteShown = true;
           notes.push('Approximate location on.');
@@ -220,15 +272,24 @@ export default function NearbyScreen() {
           err instanceof Error ? err.message : 'Could not load nearby profiles';
         setError(message);
         setItems([]);
+        hasGridDataRef.current = false;
         setModeNote(null);
       } finally {
         setLoading(false);
         setRefreshing(false);
         setInitialLoad(false);
       }
+      };
+
+      loadInFlightRef.current = run().finally(() => {
+        loadInFlightRef.current = null;
+      });
+      return loadInFlightRef.current;
     },
     [accessToken, favoritesOnly, onlineOnly],
   );
+
+  loadNearbyRef.current = loadNearby;
 
   const toggleFavorite = async (item: NearbyCard) => {
     if (!accessToken) return;
@@ -252,18 +313,29 @@ export default function NearbyScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadNearby();
-    }, [loadNearby]),
+      const stale =
+        Date.now() - lastFetchedAtRef.current > NEARBY_LIST_STALE_MS;
+      if (!hasGridDataRef.current) {
+        void loadNearbyRef.current('initial');
+      } else if (stale) {
+        void loadNearbyRef.current('silent');
+      }
+    }, [accessToken]),
   );
 
   useEffect(() => {
-    if (!accessToken || loading) return;
-    void loadNearby(true);
-  }, [onlineOnly, favoritesOnly]);
+    if (!accessToken) return;
+    if (skipFilterEffectRef.current) {
+      skipFilterEffectRef.current = false;
+      return;
+    }
+    void loadNearby('refresh');
+  }, [onlineOnly, favoritesOnly, accessToken, loadNearby]);
 
   const gridRows = useMemo(() => buildNearbyGridRows(items), [items]);
 
-  const listHeader = (
+  const listHeader = useMemo(
+    () => (
     <>
       <Text style={styles.brand}>Findr</Text>
       <Text style={styles.sub}>
@@ -295,15 +367,21 @@ export default function NearbyScreen() {
       {error ? (
         <View style={styles.stateBox}>
           <Text style={styles.error}>{error}</Text>
-          <Pressable style={styles.retry} onPress={() => loadNearby()}>
+          <Pressable
+            style={styles.retry}
+            onPress={() => void loadNearbyRef.current('initial', true)}
+          >
             <Text style={styles.retryText}>Try again</Text>
           </Pressable>
         </View>
       ) : null}
     </>
+    ),
+    [onlineOnly, favoritesOnly, modeNote, error],
   );
 
-  const listEmpty = (
+  const listEmpty = useMemo(
+    () => (
     <View style={styles.stateBox}>
       {loading && items.length === 0 && !refreshing ? (
         <View style={styles.inlineLoad}>
@@ -319,12 +397,17 @@ export default function NearbyScreen() {
             You are the only visible person in this area right now. Pull down
             to refresh after friends join.
           </Text>
-          <Pressable style={styles.retry} onPress={() => loadNearby(true)}>
+          <Pressable
+            style={styles.retry}
+            onPress={() => void loadNearbyRef.current('refresh', true)}
+          >
             <Text style={styles.retryText}>Refresh</Text>
           </Pressable>
         </>
       ) : null}
     </View>
+    ),
+    [error, initialLoad, loading, refreshing, items.length],
   );
 
   return (
@@ -337,13 +420,17 @@ export default function NearbyScreen() {
         ListEmptyComponent={listEmpty}
         contentContainerStyle={[
           styles.list,
-          (gridRows.length === 0 || loading) && styles.listGrow,
+          gridRows.length === 0 && styles.listGrow,
         ]}
         alwaysBounceVertical
+        removeClippedSubviews
+        windowSize={7}
+        maxToRenderPerBatch={9}
+        initialNumToRender={12}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => loadNearby(true)}
+            onRefresh={() => void loadNearby('refresh', true)}
             tintColor={colors.coral}
             colors={[colors.coral]}
           />

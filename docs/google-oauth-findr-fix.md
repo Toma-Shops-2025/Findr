@@ -41,8 +41,10 @@ Google **sign-up and sign-in are the same** flow: first Google login creates the
 
 1. **[OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent)** → **App name** must be **Findr** (Google shows this name on the sign-in page).
 2. **Findr Android** client → package `app.findr.mobile` + EAS **and** Play **app signing** SHA-1 fingerprints.
-3. **Findr Web** client → **Authorized redirect URIs** must include (use your Android client id prefix):
+3. **Findr Android** → scroll to **Advanced settings** → turn **on** **Enable custom URI scheme** → **Save** (required for Expo; fixes “Custom URI scheme is not enabled for your Android client”).
+4. **Findr Web** client → only **`https://`** redirect URIs (do **not** paste `com.googleusercontent.apps...` there — Google rejects it).
+5. Install a **new** Play build after any `app.json` change (versionCode **37+** includes the Android intent filter for Google redirect).
 
-   `com.googleusercontent.apps.155868445533-768bbg1kd7mrtuqlgd7kmbmdji79sr7m:/oauth2redirect`
+### Error: “Custom URI scheme is not enabled for your Android client”
 
-4. Install a **new** Play build after any `app.json` / client id change (versionCode **37+** includes the Android intent filter for Google redirect).
+Your SHA-1 can be correct and you will still see this until step 3 above is enabled. Wait 2–15 minutes after saving, then try sign-in again.

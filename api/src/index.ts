@@ -10,6 +10,8 @@ import { chatRoutes } from './routes/chat.js';
 import { safetyRoutes } from './routes/safety.js';
 import { mediaRoutes } from './routes/media.js';
 import { adminRoutes } from './routes/admin.js';
+import { deviceRoutes } from './routes/devices.js';
+import { realtimeRoutes } from './routes/realtime.js';
 import { getUserStore } from './modules/auth/userStore.js';
 import { ensureUploadsDir, UPLOADS_DIR } from './modules/media/storage.js';
 
@@ -37,6 +39,8 @@ async function main() {
   await app.register(safetyRoutes, { prefix: '/safety' });
   await app.register(mediaRoutes, { prefix: '/media' });
   await app.register(adminRoutes, { prefix: '/admin' });
+  await app.register(deviceRoutes, { prefix: '/devices' });
+  await app.register(realtimeRoutes, { prefix: '/realtime' });
 
   await app.listen({ port, host });
   const storageMode = process.env.S3_BUCKET ? 'S3/R2 + local fallback path' : 'local disk only';

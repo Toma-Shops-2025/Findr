@@ -11,6 +11,7 @@ import {
   getReportStore,
   parseReportReason,
 } from '../modules/safety/reportStore.js';
+import { applyReportSideEffects } from '../modules/safety/reportSideEffects.js';
 
 const blockSchema = z.object({
   userId: z.string().uuid().or(z.string().min(1).max(80)),
@@ -198,6 +199,9 @@ export const safetyRoutes: FastifyPluginAsync = async (app) => {
     });
 
     void notifySafetyReport(created, req.log);
+    void applyReportSideEffects(targetUserId).catch((err) => {
+      req.log.warn({ err }, 'report side effects failed');
+    });
 
     return reply.code(201).send({ ok: true, status: 'received', reportId: created.id });
   });

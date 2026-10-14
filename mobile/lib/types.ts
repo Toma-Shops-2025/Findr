@@ -29,7 +29,9 @@ export type NearbyCard = {
   photoUrls: string[];
   lookingFor: string[];
   distanceLabel: string;
+  distanceM?: number;
   online: boolean;
+  isFavorite?: boolean;
 };
 
 export type ProfileUpdateInput = {

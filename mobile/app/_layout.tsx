@@ -7,6 +7,12 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import { StatusBar } from "expo-status-bar";
 import { colors } from "@/constants/theme";
 import { AuthProvider } from "@/lib/auth";
+import * as Sentry from "@sentry/react-native";
+
+const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
+if (sentryDsn) {
+  Sentry.init({ dsn: sentryDsn });
+}
 
 export { ErrorBoundary } from "expo-router";
 export const unstable_settings = { initialRouteName: "index" };

@@ -49,8 +49,17 @@ const sqlPath = resolve(process.cwd(), fileArg);
 const sql = readFileSync(sqlPath, 'utf8');
 
 const pool = new pg.Pool({ connectionString: databaseUrl });
+const migrationName = fileArg.replace(/^.*[\\/]/, '');
 try {
   await pool.query(sql);
+  try {
+    await pool.query(
+      `INSERT INTO schema_migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`,
+      [migrationName],
+    );
+  } catch {
+    // schema_migrations may not exist until 013 is applied.
+  }
   console.log(`Applied migration: ${fileArg}`);
 } catch (err) {
   console.error('Migration failed:', err);

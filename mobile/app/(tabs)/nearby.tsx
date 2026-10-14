@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -100,6 +100,8 @@ export default function NearbyScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modeNote, setModeNote] = useState<string | null>(null);
+  const [onlineOnly, setOnlineOnly] = useState(false);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
 
   const loadNearby = useCallback(
     async (isRefresh = false) => {
@@ -138,8 +140,14 @@ export default function NearbyScreen() {
           body: JSON.stringify(body),
         });
 
+        const qs = new URLSearchParams({
+          radiusKm: '50',
+          limit: '50',
+        });
+        if (onlineOnly) qs.set('onlineOnly', 'true');
+        if (favoritesOnly) qs.set('favoritesOnly', 'true');
         const data = await apiFetch<NearbyResponse>(
-          '/geo/nearby?radiusKm=50&limit=50',
+          `/geo/nearby?${qs.toString()}`,
           { token: accessToken },
         );
         setItems(data.results || []);
@@ -173,14 +181,39 @@ export default function NearbyScreen() {
         setRefreshing(false);
       }
     },
-    [accessToken],
+    [accessToken, favoritesOnly, onlineOnly],
   );
+
+  const toggleFavorite = async (item: NearbyCard) => {
+    if (!accessToken) return;
+    const isFav = Boolean(item.isFavorite);
+    try {
+      await apiFetch(`/geo/favorites/${item.userId}`, {
+        method: isFav ? 'DELETE' : 'POST',
+        token: accessToken,
+      });
+      setItems((prev) =>
+        prev.map((row) =>
+          row.userId === item.userId
+            ? { ...row, isFavorite: !isFav }
+            : row,
+        ),
+      );
+    } catch {
+      // ignore transient errors
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
       loadNearby();
     }, [loadNearby]),
   );
+
+  useEffect(() => {
+    if (!accessToken || loading) return;
+    void loadNearby(true);
+  }, [onlineOnly, favoritesOnly]);
 
   if (loading) {
     return (
@@ -194,7 +227,29 @@ export default function NearbyScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.brand}>Findr</Text>
-      <Text style={styles.sub}>Nearby - distances are approximate</Text>
+      <Text style={styles.sub}>Nearby — sorted by distance (fresh ~6h)</Text>
+      <View style={styles.filterRow}>
+        <Pressable
+          style={[styles.filterChip, onlineOnly && styles.filterChipOn]}
+          onPress={() => setOnlineOnly((v) => !v)}
+        >
+          <Text
+            style={[styles.filterText, onlineOnly && styles.filterTextOn]}
+          >
+            Online
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.filterChip, favoritesOnly && styles.filterChipOn]}
+          onPress={() => setFavoritesOnly((v) => !v)}
+        >
+          <Text
+            style={[styles.filterText, favoritesOnly && styles.filterTextOn]}
+          >
+            Favorites
+          </Text>
+        </Pressable>
+      </View>
       {modeNote ? <Text style={styles.note}>{modeNote}</Text> : null}
       {error ? (
         <View style={styles.stateBox}>
@@ -239,6 +294,15 @@ export default function NearbyScreen() {
             <View style={styles.photo}>
               <NearbyPhoto item={item} />
               {item.online ? <View style={styles.onlineDot} /> : null}
+              <Pressable
+                style={styles.favBtn}
+                onPress={() => void toggleFavorite(item)}
+                hitSlop={8}
+              >
+                <Text style={styles.favIcon}>
+                  {item.isFavorite ? '★' : '☆'}
+                </Text>
+              </Pressable>
             </View>
             <Text style={styles.name} numberOfLines={1}>
               {item.displayName}
@@ -273,6 +337,43 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  filterChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.lg,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  filterChipOn: {
+    borderColor: colors.coral,
+    backgroundColor: 'rgba(255,107,74,0.15)',
+  },
+  filterText: {
+    color: colors.mistMuted,
+    fontSize: 13,
+    fontFamily: typography.bodyMedium,
+  },
+  filterTextOn: {
+    color: colors.coral,
+  },
+  favBtn: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 12,
+    paddingHorizontal: 4,
+  },
+  favIcon: {
+    color: colors.coral,
+    fontSize: 14,
   },
   sub: {
     fontFamily: typography.body,

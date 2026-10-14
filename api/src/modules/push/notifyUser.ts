@@ -1,0 +1,17 @@
+import { getDeviceStore } from './deviceStore.js';
+import { sendExpoPush } from './expoPush.js';
+
+export async function notifyUserPush(
+  userId: string,
+  title: string,
+  body: string,
+  data?: Record<string, string>,
+): Promise<void> {
+  const devices = await getDeviceStore();
+  const tokens = await devices.listTokens(userId);
+  await sendExpoPush(tokens, {
+    title,
+    body,
+    ...(data ? { data } : {}),
+  });
+}

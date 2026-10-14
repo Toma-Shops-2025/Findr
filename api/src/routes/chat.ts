@@ -17,6 +17,8 @@ import { sanitizeDisplayNameForPublic } from '../modules/profiles/publicDisplay.
 import { getProfileStore } from '../modules/profiles/profileStore.js';
 import { peerChatDistanceLabel } from '../modules/geo/peerChatDistance.js';
 import { getBlockStore } from '../modules/safety/blockStore.js';
+import { publishMessage } from '../modules/realtime/hub.js';
+import { notifyUserPush } from '../modules/push/notifyUser.js';
 
 /**
  * First-party 1:1 chat (MVP).
@@ -334,6 +336,19 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     const store = await getChatStore();
     try {
       const result = await store.sendHelloAttention(auth.userId, peerUserId);
+      if (result.sent) {
+        const senderName = await peerDisplayName(auth.userId);
+        void notifyUserPush(peerUserId, 'Findr', `${senderName} said hello`, {
+          type: 'hello',
+          conversationId: result.conversationId,
+        });
+        publishMessage(
+          result.conversationId,
+          [auth.userId, peerUserId],
+          { id: result.messageId, kind: 'hello' },
+          auth.userId,
+        );
+      }
       return {
         conversation: await toSummary(result.conversation, auth.userId),
         conversationId: result.conversationId,
@@ -473,7 +488,25 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
               : null,
           },
         );
-        return { message: toPublicMessage(message, auth.userId) };
+        const publicMsg = toPublicMessage(message, auth.userId);
+        const peer = peerId(resolved.conversation, auth.userId);
+        publishMessage(
+          resolved.conversation.id,
+          [auth.userId, peer],
+          publicMsg,
+          auth.userId,
+        );
+        const preview =
+          publicMsg.body?.trim() ||
+          (publicMsg.imageUrl ? 'Sent a photo' : '') ||
+          (publicMsg.videoUrl ? 'Sent a video' : '') ||
+          (publicMsg.location ? 'Shared a location' : '') ||
+          'New message';
+        void notifyUserPush(peer, 'Findr', preview, {
+          type: 'message',
+          conversationId: resolved.conversation.id,
+        });
+        return { message: publicMsg };
       } catch (err) {
         const code = (err as { code?: string }).code;
         if (code === 'conversation_not_found') {

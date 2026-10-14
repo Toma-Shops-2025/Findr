@@ -5,6 +5,7 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -27,8 +28,9 @@ import { resolveMediaUrl } from '@/lib/mediaUrl';
 import { markConversationRead } from '@/lib/useChatUnread';
 import { useSafetyActions } from '@/lib/useSafetyActions';
 import type { ConversationSummary, PublicMessage } from '@/lib/types';
+import { FindrRealtime } from '@/lib/realtime';
 
-const POLL_MS = 4000;
+const POLL_MS = 12_000;
 const DOUBLE_TAP_MS = 280;
 /** Reserved bottom band height for future sponsored placement (dp). */
 const CHAT_AD_RESERVED_DP = 56;
@@ -55,6 +57,9 @@ export default function ChatThreadScreen() {
   const listRef = useRef<FlatList<PublicMessage>>(null);
   const lastTapRef = useRef<{ id: string; t: number } | null>(null);
   const likeInFlight = useRef<Set<string>>(new Set());
+  const realtimeRef = useRef<FindrRealtime | null>(null);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [peerTyping, setPeerTyping] = useState(false);
 
   const load = useCallback(async () => {
     if (!accessToken || !id) return;
@@ -83,6 +88,31 @@ export default function ChatThreadScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!accessToken || !id) return;
+    const rt = new FindrRealtime();
+    realtimeRef.current = rt;
+    rt.connect(accessToken, {
+      onMessage: (conversationId, message) => {
+        if (conversationId !== id) return;
+        const m = normalizeMessage(message as PublicMessage);
+        setMessages((prev) => {
+          if (prev.some((x) => x.id === m.id)) return prev;
+          return [...prev, m];
+        });
+      },
+      onTyping: (conversationId, userId, active) => {
+        if (conversationId !== id) return;
+        if (userId === conversation?.peerUserId) setPeerTyping(active);
+      },
+    });
+    rt.subscribe(id);
+    return () => {
+      rt.disconnect();
+      realtimeRef.current = null;
+    };
+  }, [accessToken, id, conversation?.peerUserId]);
 
   useEffect(() => {
     if (!accessToken || !id) return;
@@ -380,11 +410,24 @@ export default function ChatThreadScreen() {
                 <ChatBubbleVideo uri={videoUri} style={styles.bubbleVideo} />
               ) : null}
               {item.location ? (
-                <Text
-                  style={[styles.bubbleText, item.mine && styles.mineText]}
+                <Pressable
+                  onPress={() => {
+                    const lat = item.location?.lat;
+                    const lng = item.location?.lng;
+                    if (lat == null || lng == null) return;
+                    const url = Platform.select({
+                      ios: `maps:?q=${lat},${lng}`,
+                      default: `geo:${lat},${lng}?q=${lat},${lng}`,
+                    });
+                    void Linking.openURL(url);
+                  }}
                 >
-                  [Location] Shared pin (open in maps later). Double-tap to like.
-                </Text>
+                  <Text
+                    style={[styles.bubbleText, item.mine && styles.mineText]}
+                  >
+                    Shared location — tap to open in Maps
+                  </Text>
+                </Pressable>
               ) : null}
               {item.body?.trim() ? (
                 <Text
@@ -408,6 +451,9 @@ export default function ChatThreadScreen() {
           );
         }}
       />
+      {peerTyping ? (
+        <Text style={styles.typing}>Typing…</Text>
+      ) : null}
       <View style={styles.composer}>
         <Pressable
           style={[styles.toolBtn, sending && styles.sendDisabled]}
@@ -430,7 +476,15 @@ export default function ChatThreadScreen() {
           placeholderTextColor={colors.mistMuted}
           style={styles.input}
           value={draft}
-          onChangeText={setDraft}
+          onChangeText={(text) => {
+            setDraft(text);
+            if (!id) return;
+            realtimeRef.current?.sendTyping(id, true);
+            if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+            typingTimerRef.current = setTimeout(() => {
+              realtimeRef.current?.sendTyping(id, false);
+            }, 1200);
+          }}
           editable={!sending}
           multiline
           maxLength={2000}
@@ -600,6 +654,12 @@ const styles = StyleSheet.create({
   },
   likeBadgeMine: {
     color: colors.ink,
+  },
+  typing: {
+    color: colors.mistMuted,
+    fontSize: 12,
+    paddingHorizontal: spacing.md,
+    paddingBottom: 4,
   },
   composer: {
     flexDirection: 'row',

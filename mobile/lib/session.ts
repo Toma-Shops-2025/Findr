@@ -1,5 +1,7 @@
 import { Platform } from 'react-native';
 
+import { EPHEMERAL_SESSION } from '@/lib/ephemeralSession';
+
 const TOKEN_KEY = 'findr.accessToken';
 const USER_KEY = 'findr.user';
 
@@ -208,7 +210,7 @@ export async function saveSession(
   session: AuthSession,
   options: SaveSessionOptions = {},
 ): Promise<void> {
-  const persist = options.persist ?? true;
+  const persist = EPHEMERAL_SESSION ? false : (options.persist ?? true);
   try {
     if (!persist) {
       memoryStore.set(TOKEN_KEY, session.accessToken);
@@ -224,6 +226,17 @@ export async function saveSession(
 
 export async function loadSession(): Promise<AuthSession | null> {
   try {
+    if (EPHEMERAL_SESSION) {
+      const accessToken = memoryStore.get(TOKEN_KEY);
+      const userJson = memoryStore.get(USER_KEY);
+      if (!accessToken || !userJson) return null;
+      try {
+        const user = JSON.parse(userJson) as AuthUser;
+        return { accessToken, user };
+      } catch {
+        return null;
+      }
+    }
     const accessToken = await safeGet(TOKEN_KEY);
     const userJson = await safeGet(USER_KEY);
     if (!accessToken || !userJson) return null;

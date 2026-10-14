@@ -22,7 +22,7 @@ export default function LoginScreen() {
   const { login, loginWithGoogle, requestPasswordReset } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [staySignedIn, setStaySignedIn] = useState(true);
+  const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [resetSent, setResetSent] = useState(false);
@@ -35,7 +35,6 @@ export default function LoginScreen() {
       await login({
         email: email.trim(),
         password,
-        staySignedIn,
       });
       router.replace('/(tabs)/nearby');
     } catch (err) {
@@ -62,87 +61,90 @@ export default function LoginScreen() {
       <View style={styles.content}>
         <Text style={styles.brand}>Findr</Text>
         <Text style={styles.headline}>Welcome back.</Text>
-        <Text style={styles.support}>Log in to pick up where you left off.</Text>
-
-        <Text style={styles.label}>Email</Text>
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          placeholder="you@email.com"
-          placeholderTextColor={colors.mistMuted}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          autoComplete="email"
-          style={styles.input}
-        />
-
-        <Text style={styles.label}>Password</Text>
-        <PasswordField
-          value={password}
-          onChangeText={setPassword}
-          placeholder="Your password"
-          returnKeyType="done"
-          onSubmitEditing={onLogin}
-        />
-
-        <Pressable
-          onPress={() => setStaySignedIn((v) => !v)}
-          style={styles.checkRow}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: staySignedIn }}
-        >
-          <View style={[styles.checkbox, staySignedIn && styles.checkboxOn]} />
-          <Text style={styles.checkText}>Stay signed in</Text>
-        </Pressable>
-
-        <Pressable
-          onPress={async () => {
-            if (!email.trim()) {
-              setError('Enter your email first, then tap Forgot password.');
-              return;
-            }
-            setResetBusy(true);
-            setError(null);
-            try {
-              await requestPasswordReset(email.trim());
-              setResetSent(true);
-            } catch {
-              setError('Could not send reset email. Try again later.');
-            } finally {
-              setResetBusy(false);
-            }
-          }}
-          disabled={resetBusy}
-        >
-          <Text style={styles.forgot}>
-            {resetSent ? 'Reset email sent (check inbox)' : 'Forgot password?'}
-          </Text>
-        </Pressable>
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        <Pressable
-          style={[styles.cta, busy && styles.ctaDisabled]}
-          onPress={onLogin}
-          disabled={busy}
-        >
-          {busy ? (
-            <ActivityIndicator color={colors.ink} />
-          ) : (
-            <Text style={styles.ctaText}>Log in</Text>
-          )}
-        </Pressable>
+        <Text style={styles.support}>
+          Sign in with Google. You stay logged in until you close the app.
+        </Text>
 
         <GoogleSignInButton
           onIdToken={async (token) => {
-            await loginWithGoogle(token);
-            router.replace('/(tabs)/nearby');
+            setBusy(true);
+            setError(null);
+            try {
+              await loginWithGoogle(token);
+              router.replace('/(tabs)/nearby');
+            } catch (err) {
+              setError((err as Error).message || 'Google sign-in failed');
+            } finally {
+              setBusy(false);
+            }
           }}
         />
 
-        <Link href="/(auth)/onboarding" style={styles.link}>
-          New here? Create an account
-        </Link>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <Pressable onPress={() => setShowEmailLogin((v) => !v)}>
+          <Text style={styles.forgot}>
+            {showEmailLogin ? 'Hide email login' : 'Use email (existing accounts)'}
+          </Text>
+        </Pressable>
+
+        {showEmailLogin ? (
+          <>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder="you@email.com"
+              placeholderTextColor={colors.mistMuted}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              autoComplete="email"
+              style={styles.input}
+            />
+            <Text style={styles.label}>Password</Text>
+            <PasswordField
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Your password"
+              returnKeyType="done"
+              onSubmitEditing={onLogin}
+            />
+            <Pressable
+              onPress={async () => {
+                if (!email.trim()) {
+                  setError('Enter your email first, then tap Forgot password.');
+                  return;
+                }
+                setResetBusy(true);
+                setError(null);
+                try {
+                  await requestPasswordReset(email.trim());
+                  setResetSent(true);
+                } catch {
+                  setError('Could not send reset email. Try again later.');
+                } finally {
+                  setResetBusy(false);
+                }
+              }}
+              disabled={resetBusy}
+            >
+              <Text style={styles.forgot}>
+                {resetSent ? 'Reset email sent (check inbox)' : 'Forgot password?'}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.cta, busy && styles.ctaDisabled]}
+              onPress={onLogin}
+              disabled={busy}
+            >
+              {busy ? (
+                <ActivityIndicator color={colors.ink} />
+              ) : (
+                <Text style={styles.ctaText}>Log in with email</Text>
+              )}
+            </Pressable>
+          </>
+        ) : null}
       </View>
         </ScrollView>
       </KeyboardAvoidingView>

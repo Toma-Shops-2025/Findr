@@ -6,6 +6,7 @@ import {
   haversineMeters,
   type CoarseLocation,
 } from './coarseLocation.js';
+import { LOCATION_MAX_AGE_MS } from './constants.js';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -68,8 +69,11 @@ class MemoryLocationStore {
     const lng = coerceFloat(longitude, 'longitude');
     const radius = coerceFloat(radiusM, 'radiusM');
     const results: Array<CoarseLocation & { distanceM: number }> = [];
+    const cutoff = Date.now() - LOCATION_MAX_AGE_MS;
     for (const loc of this.byUserId.values()) {
       if (loc.userId === excludeUserId) continue;
+      const updated = Date.parse(loc.updatedAt);
+      if (!Number.isFinite(updated) || updated < cutoff) continue;
       const distanceM = haversineMeters(
         lat,
         lng,
@@ -166,6 +170,7 @@ class PostgresLocationStore {
               ) AS distance_m
        FROM user_locations
        WHERE user_id <> $3
+         AND updated_at >= NOW() - INTERVAL '6 hours'
          AND ST_DWithin(
            geom,
            ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326)::geography,

@@ -24,8 +24,10 @@ const locationSchema = z.object({
 });
 
 const nearbyQuerySchema = z.object({
+  /** Search radius in miles (US). Takes precedence over radiusKm when set. */
+  radiusMiles: z.coerce.number().min(0.5).max(50).optional(),
   radiusKm: z.coerce.number().min(0.5).max(200).optional().default(50),
-  limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+  limit: z.coerce.number().int().min(1).max(150).optional().default(80),
   /** Optional client coords when the user has not POSTed /geo/location yet. */
   latitude: z.coerce.number().min(-90).max(90).optional(),
   longitude: z.coerce.number().min(-180).max(180).optional(),
@@ -136,12 +138,16 @@ export const geoRoutes: FastifyPluginAsync = async (app) => {
       await store.upsert(auth.userId, latitude, longitude);
     }
 
-    const radiusM = parsed.data.radiusKm * 1000;
+    const radiusM =
+      parsed.data.radiusMiles != null
+        ? parsed.data.radiusMiles * 1609.344
+        : parsed.data.radiusKm * 1000;
     const nearby = await store.nearbyWithin(
       latitude,
       longitude,
       radiusM,
       auth.userId,
+      Math.min(parsed.data.limit * 4, 250),
     );
 
     const blocks = await getBlockStore();
@@ -225,7 +231,10 @@ export const geoRoutes: FastifyPluginAsync = async (app) => {
     return {
       results,
       mode,
-      radiusKm: parsed.data.radiusKm,
+      radiusKm: radiusM / 1000,
+      radiusMiles:
+        parsed.data.radiusMiles ??
+        Math.round((radiusM / 1609.344) * 10) / 10,
       count: results.length,
       sortedBy: 'distance',
       ...(mode === 'memory'

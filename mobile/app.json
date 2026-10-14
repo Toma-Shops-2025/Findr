@@ -60,6 +60,7 @@
           }
         }
       ],
+      "./plugins/withAndroidCiGradle.js",
       "expo-router",
       [
         "expo-splash-screen",

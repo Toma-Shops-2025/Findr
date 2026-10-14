@@ -7,7 +7,7 @@ export const NEARBY_RADIUS_MILES = 50;
 export const NEARBY_RADIUS_KM = NEARBY_RADIUS_MILES * 1.609344;
 
 /** Close band pinned above the separator (Grindr-style top grid). */
-export const NEARBY_CLOSE_SECTION_MILES = 5;
+export const NEARBY_CLOSE_SECTION_MILES = 10;
 
 export const NEARBY_FETCH_LIMIT = 100;
 

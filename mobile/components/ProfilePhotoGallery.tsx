@@ -29,6 +29,50 @@ const width = Dimensions.get('window').width;
 const photoWidth = Math.min(width - spacing.lg * 2, 360);
 const photoHeight = photoWidth * (4 / 3);
 
+const GRID_PHOTO_HINT =
+  'Grid photo required for Nearby. Any non-explicit image is OK (avatar, pet, art). Up to 5 — swipe to browse.';
+
+function PhotoSlot({
+  uri,
+  initial,
+  editable,
+  onPress,
+}: {
+  uri: string | null;
+  initial: string;
+  editable?: boolean;
+  onPress?: () => void;
+}) {
+  const [failed, setFailed] = useState(false);
+  const showPlaceholder = !uri || failed;
+
+  if (showPlaceholder) {
+    return (
+      <Pressable
+        style={styles.photo}
+        onPress={editable ? onPress : undefined}
+        disabled={!editable}
+      >
+        <Text style={styles.initial}>{initial}</Text>
+        <Text style={styles.placeholderHint}>
+          {failed
+            ? 'Photo could not load. Tap Add photo to replace, or pull to refresh after updating the app.'
+            : GRID_PHOTO_HINT}
+        </Text>
+      </Pressable>
+    );
+  }
+
+  return (
+    <Image
+      source={{ uri }}
+      style={styles.photoImage}
+      accessibilityIgnoresInvertColors
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 export function ProfilePhotoGallery({
   photoUrls,
   displayName,
@@ -50,18 +94,26 @@ export function ProfilePhotoGallery({
 
   if (urls.length === 0) {
     return (
-      <Pressable
-        style={styles.photo}
-        onPress={editable ? onAddPhoto : undefined}
-        disabled={!editable || uploading}
-      >
-        <Text style={styles.initial}>{initial}</Text>
+      <View style={styles.wrap}>
+        <PhotoSlot
+          uri={null}
+          initial={initial}
+          editable={editable}
+          onPress={onAddPhoto}
+        />
         {uploading ? (
           <View style={styles.overlay}>
             <Text style={styles.overlayText}>Uploading…</Text>
           </View>
         ) : null}
-      </Pressable>
+        {editable ? (
+          <View style={styles.actions}>
+            <Pressable onPress={onAddPhoto} disabled={uploading}>
+              <Text style={styles.link}>Add photo (0/{PROFILE_MAX_PHOTOS})</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </View>
     );
   }
 
@@ -80,17 +132,12 @@ export function ProfilePhotoGallery({
           const uri = resolveMediaUrl(item);
           return (
             <View style={{ width: photoWidth, height: photoHeight }}>
-              {uri ? (
-                <Image
-                  source={{ uri }}
-                  style={styles.photoImage}
-                  accessibilityIgnoresInvertColors
-                />
-              ) : (
-                <View style={styles.photo}>
-                  <Text style={styles.initial}>{initial}</Text>
-                </View>
-              )}
+              <PhotoSlot
+                uri={uri}
+                initial={initial}
+                editable={editable}
+                onPress={onAddPhoto}
+              />
             </View>
           );
         }}
@@ -160,6 +207,14 @@ const styles = StyleSheet.create({
     fontSize: 48,
     fontWeight: '700',
     color: colors.mistMuted,
+  },
+  placeholderHint: {
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.mistMuted,
+    textAlign: 'center',
   },
   dots: {
     flexDirection: 'row',

@@ -17,12 +17,13 @@ import { PasswordField } from '@/components/PasswordField';
 import { GoogleSignInButton } from '@/components/GoogleSignInButton';
 import { colors, radii, spacing, typography } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
+import { GOOGLE_ONLY_AUTH } from '@/lib/authUi';
 
 export default function LoginScreen() {
   const { login, loginWithGoogle, requestPasswordReset } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showEmailLogin, setShowEmailLogin] = useState(false);
+  const [showEmailLogin, setShowEmailLogin] = useState(!GOOGLE_ONLY_AUTH);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [resetSent, setResetSent] = useState(false);
@@ -62,7 +63,9 @@ export default function LoginScreen() {
         <Text style={styles.brand}>Findr</Text>
         <Text style={styles.headline}>Welcome back.</Text>
         <Text style={styles.support}>
-          Sign in with Google. You stay logged in until you close the app.
+          {GOOGLE_ONLY_AUTH
+            ? 'Sign in with Google. Session ends when you close the app.'
+            : 'Sign in with Google or email until Google is fully verified on your build.'}
         </Text>
 
         <GoogleSignInButton
@@ -82,13 +85,15 @@ export default function LoginScreen() {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <Pressable onPress={() => setShowEmailLogin((v) => !v)}>
-          <Text style={styles.forgot}>
-            {showEmailLogin ? 'Hide email login' : 'Use email (existing accounts)'}
-          </Text>
-        </Pressable>
+        {!GOOGLE_ONLY_AUTH ? (
+          <Pressable onPress={() => setShowEmailLogin((v) => !v)}>
+            <Text style={styles.forgot}>
+              {showEmailLogin ? 'Hide email login' : 'Use email (existing accounts)'}
+            </Text>
+          </Pressable>
+        ) : null}
 
-        {showEmailLogin ? (
+        {showEmailLogin && !GOOGLE_ONLY_AUTH ? (
           <>
             <Text style={styles.label}>Email</Text>
             <TextInput

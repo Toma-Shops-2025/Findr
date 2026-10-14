@@ -1,5 +1,5 @@
-import { sendTransactionalEmail } from '../email/send.js';
 import type { CreatedReport } from './reportStore.js';
+import { notifyFounderInvestigation } from '../notify/founderAlerts.js';
 
 export async function notifySafetyReport(
   report: CreatedReport,
@@ -13,15 +13,19 @@ export async function notifySafetyReport(
     targetUserId: report.targetUserId,
     createdAt: report.createdAt,
   };
-  if (report.reason === 'underage_suspicion') {
-    log.warn(payload, 'Child safety report received');
-    const to = process.env.SAFETY_ALERT_TO?.trim() ?? 'contactus@myfindr.fun';
-    await sendTransactionalEmail({
-      to,
-      subject: `[Findr] Child safety report ${report.id.slice(0, 8)}`,
-      text: `Underage suspicion report.\nID: ${report.id}\nTarget user: ${report.targetUserId}\nReporter: ${report.reporterId}`,
-    });
-  } else {
-    log.info(payload, 'Safety report received');
-  }
+  const level = report.reason === 'underage_suspicion' ? 'warn' : 'info';
+  log[level](payload, 'Safety report received');
+
+  const adminUrl = process.env.ADMIN_PUBLIC_URL?.trim() || 'https://api.myfindr.fun/admin/';
+  await notifyFounderInvestigation({
+    kind: 'safety_report',
+    title:
+      report.reason === 'underage_suspicion'
+        ? 'Child safety report'
+        : 'New safety report',
+    body: `Reason: ${report.reason}\nReport: ${report.id}\nTarget: ${report.targetUserId}\nReporter: ${report.reporterId}\nReview: ${adminUrl}`,
+    data: { reportId: report.id, reason: report.reason },
+  }).catch((err) => {
+    log.warn({ err }, 'founder alert failed');
+  });
 }

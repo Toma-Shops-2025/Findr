@@ -17,6 +17,7 @@ import { GoogleSignInButton } from '@/components/GoogleSignInButton';
 import { PasswordField } from '@/components/PasswordField';
 import { colors, radii, spacing, typography } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
+import { GOOGLE_ONLY_AUTH } from '@/lib/authUi';
 
 /**
  * Signup + 18+ age gate + legal acceptances (no DOB on MVP signup).
@@ -27,7 +28,7 @@ import { useAuth } from '@/lib/auth';
  */
 export default function OnboardingScreen() {
   const { signup, loginWithGoogle } = useAuth();
-  const [showEmailSignup, setShowEmailSignup] = useState(false);
+  const [showEmailSignup, setShowEmailSignup] = useState(!GOOGLE_ONLY_AUTH);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [accepted, setAccepted] = useState(false);
@@ -136,13 +137,17 @@ export default function OnboardingScreen() {
               }}
             />
 
-            <Pressable onPress={() => setShowEmailSignup((v) => !v)}>
-              <Text style={styles.linkInline}>
-                {showEmailSignup ? 'Hide email sign-up' : 'Sign up with email instead'}
-              </Text>
-            </Pressable>
+            {!GOOGLE_ONLY_AUTH ? (
+              <Pressable onPress={() => setShowEmailSignup((v) => !v)}>
+                <Text style={styles.linkInline}>
+                  {showEmailSignup
+                    ? 'Hide email sign-up'
+                    : 'Sign up with email instead'}
+                </Text>
+              </Pressable>
+            ) : null}
 
-            {showEmailSignup ? (
+            {showEmailSignup && !GOOGLE_ONLY_AUTH ? (
               <>
             <Text style={styles.label}>Email</Text>
             <TextInput

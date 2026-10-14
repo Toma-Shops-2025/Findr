@@ -262,10 +262,6 @@ export default function ProfileScreen() {
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={styles.photoHint}>
-        At least one grid photo is required to appear in Nearby. Any non-explicit
-        image is fine (avatar, pet, landscape). Explicit photos belong in private chat.
-      </Text>
       <ProfilePhotoGallery
         photoUrls={photoUrls}
         displayName={displayName}

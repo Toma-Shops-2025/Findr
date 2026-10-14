@@ -1,5 +1,7 @@
 # Engineering hygiene (what those items mean)
 
+**Status:** Implemented in this repo — use the commands below on Render and in CI.
+
 ## Migration runner
 
 **Problem:** You have many SQL files in `db/migrations/`. It is easy to forget which ones ran on Render.

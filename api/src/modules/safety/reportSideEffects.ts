@@ -1,4 +1,5 @@
 import { getPool } from '../db.js';
+import { notifyFounderInvestigation } from '../notify/founderAlerts.js';
 import { getProfileStore } from '../profiles/profileStore.js';
 
 const AUTO_HIDE_OPEN_REPORTS = Number(
@@ -30,5 +31,11 @@ export async function applyReportSideEffects(targetUserId: string): Promise<void
   if (openCount >= AUTO_HIDE_OPEN_REPORTS) {
     const profiles = await getProfileStore();
     await profiles.upsert(targetUserId, { isVisible: false });
+    await notifyFounderInvestigation({
+      kind: 'profile_auto_hidden',
+      title: 'Profile auto-hidden',
+      body: `User ${targetUserId} hidden from Nearby after ${openCount} open reports. Review in admin.`,
+      data: { targetUserId, openCount: String(openCount) },
+    }).catch(() => undefined);
   }
 }

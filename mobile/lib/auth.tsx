@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { InteractionManager } from 'react-native';
 
+import { GoogleAuthSessionHandler } from '@/components/GoogleAuthSessionHandler';
 import { EPHEMERAL_SESSION } from '@/lib/ephemeralSession';
 import {
   clearSession,
@@ -231,7 +232,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [session, ready, signup, login, loginWithGoogle, requestPasswordReset, logout],
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      <GoogleAuthSessionHandler />
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth(): AuthContextValue {

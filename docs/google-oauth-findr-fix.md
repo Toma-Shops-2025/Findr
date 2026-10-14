@@ -36,3 +36,13 @@ Download / view the keystore fingerprint and add it to the **Android** OAuth cli
 ## Sign-up vs sign-in
 
 Google **sign-up and sign-in are the same** flow: first Google login creates the Findr account via `POST /auth/google`. The app should show **Continue with Google** on both Login and Create account screens.
+
+## Still says "RewardLoop" or Error 400?
+
+1. **[OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent)** → **App name** must be **Findr** (Google shows this name on the sign-in page).
+2. **Findr Android** client → package `app.findr.mobile` + EAS **and** Play **app signing** SHA-1 fingerprints.
+3. **Findr Web** client → **Authorized redirect URIs** must include (use your Android client id prefix):
+
+   `com.googleusercontent.apps.155868445533-768bbg1kd7mrtuqlgd7kmbmdji79sr7m:/oauth2redirect`
+
+4. Install a **new** Play build after any `app.json` / client id change (versionCode **37+** includes the Android intent filter for Google redirect).

@@ -10,6 +10,10 @@ import { sanitizeDisplayNameForPublic } from '../modules/profiles/publicDisplay.
 import { getProfileStore } from '../modules/profiles/profileStore.js';
 import { getBlockStore } from '../modules/safety/blockStore.js';
 import { getFavoriteStore } from '../modules/geo/favoriteStore.js';
+import {
+  demoNearbyCards,
+  shouldIncludeDemoNearby,
+} from '../modules/geo/demoPersonas.js';
 
 // Lat/lng/accuracy/radius are floats. Only limit (and age elsewhere) are ints.
 const locationSchema = z.object({
@@ -206,6 +210,16 @@ export const geoRoutes: FastifyPluginAsync = async (app) => {
       });
 
       if (results.length >= parsed.data.limit) break;
+    }
+
+    if (shouldIncludeDemoNearby(results.length)) {
+      const existingIds = new Set(results.map((r) => r.userId));
+      for (const demo of demoNearbyCards(auth.userId)) {
+        if (existingIds.has(demo.userId)) continue;
+        results.push(demo);
+        if (results.length >= parsed.data.limit) break;
+      }
+      results.sort((a, b) => a.distanceM - b.distanceM);
     }
 
     return {

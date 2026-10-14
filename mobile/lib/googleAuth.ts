@@ -1,4 +1,5 @@
 import type { AuthSessionResult } from 'expo-auth-session';
+import { makeRedirectUri } from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
@@ -20,6 +21,12 @@ function readClientId(
   return fromExtra ?? process.env[envKey] ?? undefined;
 }
 
+/** Google expects this redirect scheme for the Android OAuth client (not app.findr.mobile). */
+export function googleAndroidRedirectUri(androidClientId: string): string {
+  const prefix = androidClientId.replace('.apps.googleusercontent.com', '');
+  return `com.googleusercontent.apps.${prefix}:/oauth2redirect`;
+}
+
 export function useGoogleAuthRequest() {
   const webClientId = readClientId(
     'EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID',
@@ -29,18 +36,33 @@ export function useGoogleAuthRequest() {
     'EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID',
     'googleAndroidClientId',
   );
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId,
-    // Never pass the Web client ID as androidClientId (causes custom-scheme error).
-    androidClientId:
-      Platform.OS === 'android'
-        ? androidOAuthClientId
-        : androidOAuthClientId ?? webClientId,
-  });
+
+  const redirectUri =
+    Platform.OS === 'android' && androidOAuthClientId
+      ? googleAndroidRedirectUri(androidOAuthClientId)
+      : makeRedirectUri({ scheme: 'findr', path: 'oauthredirect' });
+
+  const [request, response, promptAsync] = Google.useIdTokenAuthRequest(
+    {
+      webClientId,
+      androidClientId:
+        Platform.OS === 'android'
+          ? androidOAuthClientId
+          : androidOAuthClientId ?? webClientId,
+      iosClientId: webClientId,
+      redirectUri,
+      scopes: ['openid', 'profile', 'email'],
+    },
+    Platform.OS === 'android' && androidOAuthClientId
+      ? { native: googleAndroidRedirectUri(androidOAuthClientId) }
+      : { scheme: 'findr', path: 'oauthredirect' },
+  );
+
   const configured =
     Boolean(webClientId) &&
     (Platform.OS !== 'android' || Boolean(androidOAuthClientId));
-  return { request, response, promptAsync, configured };
+
+  return { request, response, promptAsync, configured, redirectUri };
 }
 
 export function idTokenFromGoogleResponse(

@@ -6,6 +6,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Linking,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -16,7 +17,7 @@ import {
 import { Stack, router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import { useVideoPlayer, VideoView } from 'expo-video';
+import { useVideoPlayer, VideoView, type VideoView as VideoViewType } from 'expo-video';
 
 import { colors, radii, spacing, typography } from '@/constants/theme';
 import {
@@ -394,60 +395,76 @@ export default function ChatThreadScreen() {
           const imageUri = resolveMediaUrl(item.imageUrl);
           const videoUri = resolveMediaUrl(item.videoUrl);
           const showHeart = (item.likeCount ?? 0) > 0 || item.likedByMe;
+          const bubbleStyle = [
+            styles.bubble,
+            item.mine ? styles.mine : styles.theirs,
+          ];
+          const hasTextOrImage =
+            Boolean(imageUri) ||
+            Boolean(item.body?.trim()) ||
+            Boolean(item.location);
+
           return (
-            <Pressable
-              onPress={() => onBubblePress(item)}
-              style={[styles.bubble, item.mine ? styles.mine : styles.theirs]}
-            >
-              {imageUri ? (
-                <Image
-                  source={{ uri: imageUri }}
-                  style={styles.bubbleImage}
-                  accessibilityIgnoresInvertColors
+            <View style={bubbleStyle}>
+              {videoUri ? (
+                <ChatBubbleVideo
+                  uri={videoUri}
+                  style={styles.bubbleVideo}
+                  onDoubleTap={() => void toggleLike(item)}
                 />
               ) : null}
-              {videoUri ? (
-                <ChatBubbleVideo uri={videoUri} style={styles.bubbleVideo} />
+              {hasTextOrImage ? (
+                <Pressable onPress={() => onBubblePress(item)}>
+                  {imageUri ? (
+                    <Image
+                      source={{ uri: imageUri }}
+                      style={styles.bubbleImage}
+                      accessibilityIgnoresInvertColors
+                    />
+                  ) : null}
+                  {item.location ? (
+                    <Pressable
+                      onPress={() => {
+                        const lat = item.location?.lat;
+                        const lng = item.location?.lng;
+                        if (lat == null || lng == null) return;
+                        const url = Platform.select({
+                          ios: `maps:?q=${lat},${lng}`,
+                          default: `geo:${lat},${lng}?q=${lat},${lng}`,
+                        });
+                        void Linking.openURL(url);
+                      }}
+                    >
+                      <Text
+                        style={[styles.bubbleText, item.mine && styles.mineText]}
+                      >
+                        Shared location — tap to open in Maps
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {item.body?.trim() ? (
+                    <Text
+                      style={[styles.bubbleText, item.mine && styles.mineText]}
+                    >
+                      {item.body}
+                    </Text>
+                  ) : null}
+                </Pressable>
               ) : null}
-              {item.location ? (
-                <Pressable
-                  onPress={() => {
-                    const lat = item.location?.lat;
-                    const lng = item.location?.lng;
-                    if (lat == null || lng == null) return;
-                    const url = Platform.select({
-                      ios: `maps:?q=${lat},${lng}`,
-                      default: `geo:${lat},${lng}?q=${lat},${lng}`,
-                    });
-                    void Linking.openURL(url);
-                  }}
-                >
+              {showHeart ? (
+                <Pressable onPress={() => onBubblePress(item)}>
                   <Text
-                    style={[styles.bubbleText, item.mine && styles.mineText]}
+                    style={[
+                      styles.likeBadge,
+                      item.mine ? styles.likeBadgeMine : styles.likeBadgeTheirs,
+                    ]}
                   >
-                    Shared location — tap to open in Maps
+                    {item.likedByMe ? 'Liked' : 'Like'}
+                    {(item.likeCount ?? 0) > 1 ? ` ${item.likeCount}` : ''}
                   </Text>
                 </Pressable>
               ) : null}
-              {item.body?.trim() ? (
-                <Text
-                  style={[styles.bubbleText, item.mine && styles.mineText]}
-                >
-                  {item.body}
-                </Text>
-              ) : null}
-              {showHeart ? (
-                <Text
-                  style={[
-                    styles.likeBadge,
-                    item.mine ? styles.likeBadgeMine : styles.likeBadgeTheirs,
-                  ]}
-                >
-                  {item.likedByMe ? 'Liked' : 'Like'}
-                  {(item.likeCount ?? 0) > 1 ? ` ${item.likeCount}` : ''}
-                </Text>
-              ) : null}
-            </Pressable>
+            </View>
           );
         }}
       />
@@ -515,20 +532,79 @@ export default function ChatThreadScreen() {
 function ChatBubbleVideo({
   uri,
   style,
+  onDoubleTap,
 }: {
   uri: string;
   style: object;
+  onDoubleTap?: () => void;
 }) {
   const player = useVideoPlayer(uri, (p) => {
     p.loop = false;
   });
+  const inlineRef = useRef<VideoViewType>(null);
+  const fullscreenRef = useRef<VideoViewType>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  const lastTapRef = useRef(0);
+
+  const onVideoPress = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < DOUBLE_TAP_MS) {
+      lastTapRef.current = 0;
+      onDoubleTap?.();
+      return;
+    }
+    lastTapRef.current = now;
+    if (player.playing) {
+      player.pause();
+    } else {
+      void player.play();
+    }
+  };
+
+  const openFullscreen = async () => {
+    setFullscreen(true);
+    await fullscreenRef.current?.enterFullscreen();
+  };
+
   return (
-    <VideoView
-      player={player}
-      style={style}
-      nativeControls
-      contentFit="cover"
-    />
+    <>
+      <Pressable onPress={onVideoPress} onLongPress={() => void openFullscreen()}>
+        <VideoView
+          ref={inlineRef}
+          player={player}
+          style={style}
+          nativeControls
+          contentFit="cover"
+          surfaceType="textureView"
+          fullscreenOptions={{ enable: true }}
+        />
+        <Text style={styles.videoHint}>Tap play · Long-press fullscreen</Text>
+      </Pressable>
+      <Modal
+        visible={fullscreen}
+        animationType="fade"
+        onRequestClose={() => setFullscreen(false)}
+      >
+        <View style={styles.videoModalBackdrop}>
+          <Pressable
+            style={styles.videoModalClose}
+            onPress={() => setFullscreen(false)}
+          >
+            <Text style={styles.videoModalCloseText}>Close</Text>
+          </Pressable>
+          <VideoView
+            ref={fullscreenRef}
+            player={player}
+            style={styles.videoModalPlayer}
+            nativeControls
+            contentFit="contain"
+            surfaceType="textureView"
+            fullscreenOptions={{ enable: true }}
+            onFullscreenExit={() => setFullscreen(false)}
+          />
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -628,11 +704,38 @@ const styles = StyleSheet.create({
     backgroundColor: colors.ink,
   },
   bubbleVideo: {
-    width: 200,
-    height: 150,
+    width: 220,
+    height: 165,
     borderRadius: radii.md,
     backgroundColor: colors.ink,
     marginBottom: spacing.xs,
+  },
+  videoHint: {
+    fontFamily: typography.body,
+    fontSize: 11,
+    color: colors.mistMuted,
+    marginBottom: spacing.xs,
+  },
+  videoModalBackdrop: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+  },
+  videoModalPlayer: {
+    width: '100%',
+    height: '80%',
+  },
+  videoModalClose: {
+    position: 'absolute',
+    top: spacing.lg,
+    right: spacing.lg,
+    zIndex: 2,
+    padding: spacing.sm,
+  },
+  videoModalCloseText: {
+    fontFamily: typography.bodyMedium,
+    color: colors.mist,
+    fontSize: 16,
   },
   bubbleText: {
     fontFamily: typography.body,

@@ -14,6 +14,7 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PolicyDisclaimerBanner } from '@/components/PolicyDisclaimerBanner';
 import { colors, radii, spacing, typography } from '@/constants/theme';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -210,6 +211,8 @@ export default function SettingsScreen() {
         />
       }
     >
+      <PolicyDisclaimerBanner variant="safety" />
+
       <Text style={styles.lead}>
         Visibility, account, and safety tools. Findr is 18+ only.
       </Text>

@@ -1,6 +1,7 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PolicyDisclaimerBanner } from '@/components/PolicyDisclaimerBanner';
 import { colors, spacing, typography } from '@/constants/theme';
 
 type Section = {
@@ -28,12 +29,7 @@ export function LegalDocScreen({ title, updated, intro, sections }: Props) {
       >
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.meta}>Last updated: {updated}</Text>
-        <View style={styles.banner}>
-          <Text style={styles.bannerText}>
-            These policies may be updated from time to time. Continued use of
-            Findr means you accept the current version shown here.
-          </Text>
-        </View>
+        <PolicyDisclaimerBanner />
         <Text style={styles.body}>{intro}</Text>
         {sections.map((section) => (
           <View key={section.heading} style={styles.section}>
@@ -66,19 +62,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.body,
     fontSize: 13,
     color: colors.mistMuted,
-  },
-  banner: {
-    backgroundColor: colors.inkElevated,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    padding: spacing.md,
-  },
-  bannerText: {
-    fontFamily: typography.body,
-    fontSize: 13,
-    color: colors.coral,
-    lineHeight: 18,
   },
   heading: {
     fontFamily: typography.heading,

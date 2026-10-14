@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { GuidelinesAckModal } from '@/components/GuidelinesAckModal';
@@ -7,6 +7,10 @@ import { TabBarSymbol } from '@/components/TabBarSymbol';
 import { colors, typography } from '@/constants/theme';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import {
+  isGuidelinesAckedLocally,
+  markGuidelinesAckedLocally,
+} from '@/lib/guidelinesAck';
 import { registerFindrPushToken } from '@/lib/push';
 import { useChatUnreadCount } from '@/lib/useChatUnread';
 
@@ -26,24 +30,39 @@ function TabLabel({ label, focused }: { label: string; focused: boolean }) {
 
 export default function TabsLayout() {
   const unreadChats = useChatUnreadCount();
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
   const [showGuidelines, setShowGuidelines] = useState(false);
+  const guidelinesCheckedForUser = useRef<string | null>(null);
 
   useEffect(() => {
     if (!accessToken) return;
     void registerFindrPushToken(accessToken);
+  }, [accessToken]);
+
+  useEffect(() => {
+    const userId = user?.id;
+    if (!accessToken || !userId) return;
+    if (guidelinesCheckedForUser.current === userId) return;
+
     void (async () => {
+      guidelinesCheckedForUser.current = userId;
+      if (await isGuidelinesAckedLocally(userId)) return;
+
       try {
         const data = await apiFetch<{ acknowledged: boolean }>(
           '/profiles/me/guidelines',
           { token: accessToken },
         );
-        if (!data.acknowledged) setShowGuidelines(true);
-      } catch {
+        if (data.acknowledged) {
+          await markGuidelinesAckedLocally(userId);
+          return;
+        }
         setShowGuidelines(true);
+      } catch {
+        // Network/API errors should not force the modal (avoids repeat popups).
       }
     })();
-  }, [accessToken]);
+  }, [accessToken, user?.id]);
 
   return (
     <>
@@ -51,6 +70,8 @@ export default function TabsLayout() {
       visible={showGuidelines}
       onAccept={() => {
         setShowGuidelines(false);
+        const userId = user?.id;
+        if (userId) void markGuidelinesAckedLocally(userId);
         if (!accessToken) return;
         void apiFetch('/profiles/me/ack-guidelines', {
           method: 'POST',

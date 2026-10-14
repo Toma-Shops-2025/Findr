@@ -244,8 +244,11 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     const pool = await import('../modules/db.js').then((m) => m.getPool());
     if (pool) {
       await pool.query(
-        `UPDATE profiles SET guidelines_ack_at = NOW(), updated_at = NOW()
-         WHERE user_id = $1`,
+        `INSERT INTO profiles (user_id, display_name, guidelines_ack_at, updated_at, last_active_at)
+         VALUES ($1, '', NOW(), NOW(), NOW())
+         ON CONFLICT (user_id) DO UPDATE SET
+           guidelines_ack_at = NOW(),
+           updated_at = NOW()`,
         [auth.userId],
       );
     }

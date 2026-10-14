@@ -260,3 +260,12 @@ export async function clearSession(): Promise<void> {
     console.warn('clearSession failed', err);
   }
 }
+
+/** Small persisted flags (guidelines ack, etc.) — same storage as session tokens. */
+export async function readPreference(key: string): Promise<string | null> {
+  return safeGet(key);
+}
+
+export async function writePreference(key: string, value: string): Promise<void> {
+  await safeSet(key, value);
+}

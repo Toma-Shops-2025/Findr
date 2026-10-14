@@ -76,6 +76,7 @@ export default function ChatsScreen() {
       if (!accessToken) {
         setError('Sign in to see your chats.');
         setLoading(false);
+        setRefreshing(false);
         return;
       }
       if (isRefresh) setRefreshing(true);
@@ -104,44 +105,53 @@ export default function ChatsScreen() {
     }, [load]),
   );
 
-  if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={colors.coral} />
-        <Text style={styles.hint}>Loading chats...</Text>
-      </View>
-    );
-  }
+  const listHeader = error ? (
+    <View style={styles.stateBox}>
+      <Text style={styles.error}>{error}</Text>
+      <Pressable style={styles.retry} onPress={() => load()}>
+        <Text style={styles.retryText}>Try again</Text>
+      </Pressable>
+    </View>
+  ) : null;
 
-  return (
-    <View style={styles.container}>
-      {error ? (
-        <View style={styles.stateBox}>
-          <Text style={styles.error}>{error}</Text>
-          <Pressable style={styles.retry} onPress={() => load()}>
-            <Text style={styles.retryText}>Try again</Text>
-          </Pressable>
+  const listEmpty = !error ? (
+    <View style={styles.stateBox}>
+      {loading && !refreshing ? (
+        <View style={styles.centeredInline}>
+          <ActivityIndicator color={colors.coral} />
+          <Text style={styles.hint}>Loading chats...</Text>
         </View>
-      ) : null}
-
-      {!error && threads.length === 0 ? (
-        <View style={styles.stateBox}>
+      ) : (
+        <>
           <Text style={styles.emptyTitle}>No chats yet</Text>
           <Text style={styles.emptyBody}>
             Open Nearby, tap Message on someone, and start a conversation.
+            Pull down to refresh.
           </Text>
-        </View>
-      ) : null}
+        </>
+      )}
+    </View>
+  ) : null;
 
+  return (
+    <View style={styles.container}>
       <FlatList
+        style={styles.listFlex}
         data={threads}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={listEmpty}
+        contentContainerStyle={[
+          styles.list,
+          threads.length === 0 && styles.listGrow,
+        ]}
+        alwaysBounceVertical
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => load(true)}
             tintColor={colors.coral}
+            colors={[colors.coral]}
           />
         }
         renderItem={({ item }) => (
@@ -179,6 +189,14 @@ export default function ChatsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.ink },
+  listFlex: { flex: 1 },
+  listGrow: { flexGrow: 1 },
+  centeredInline: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xl,
+    gap: spacing.sm,
+  },
   centered: {
     flex: 1,
     backgroundColor: colors.ink,

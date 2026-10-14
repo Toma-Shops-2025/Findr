@@ -34,7 +34,7 @@ const files = readdirSync(migrationsDir)
   .filter((f) => f.endsWith('.sql'))
   .sort();
 
-const pool = new pg.Pool({ connectionString: databaseUrl });
+const pool = new pg.Pool(pgPoolOptions(databaseUrl));
 
 async function ensureTrackingTable(client) {
   const sql = readFileSync(

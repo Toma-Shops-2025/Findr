@@ -19,6 +19,7 @@ const apiPkg = resolve(repoRoot, 'api', 'package.json');
 
 const require = createRequire(apiPkg);
 const pg = require('pg');
+const { pgPoolOptions } = await import('./pgConfig.mjs');
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -30,7 +31,7 @@ const files = readdirSync(migrationsDir)
   .filter((f) => f.endsWith('.sql'))
   .sort();
 
-const pool = new pg.Pool({ connectionString: databaseUrl });
+const pool = new pg.Pool(pgPoolOptions(databaseUrl));
 
 async function appliedSet() {
   const hasTable = await pool.query(`

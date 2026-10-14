@@ -22,6 +22,7 @@ if (!existsSync(apiPkg)) {
 
 const require = createRequire(apiPkg);
 const pg = require('pg');
+const { pgPoolOptions } = await import('./pgConfig.mjs');
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {

@@ -16,7 +16,19 @@
     },
     "android": {
       "package": "app.findr.mobile",
-      "versionCode": 36,
+      "versionCode": 37,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "com.googleusercontent.apps.155868445533-768bbg1kd7mrtuqlgd7kmbmdji79sr7m",
+              "pathPrefix": "/oauth2redirect"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",

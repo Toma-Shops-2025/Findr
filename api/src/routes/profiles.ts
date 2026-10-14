@@ -12,6 +12,10 @@ import {
 import { getProfileStore } from '../modules/profiles/profileStore.js';
 import type { LookingFor, ProfileRecord, PublicProfile } from '../modules/profiles/types.js';
 import { getBlockStore } from '../modules/safety/blockStore.js';
+import {
+  getDemoPersona,
+  isDemoPersonaId,
+} from '../modules/geo/demoPersonas.js';
 
 const lookingForEnum = z.enum([
   'dates',
@@ -266,6 +270,32 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const peerId = params.data.userId;
+
+    if (isDemoPersonaId(peerId)) {
+      const demo = getDemoPersona(peerId);
+      if (!demo) {
+        return reply.code(404).send({ error: 'profile_unavailable' });
+      }
+      return {
+        profile: {
+          userId: demo.id,
+          displayName: demo.displayName,
+          bio: 'Demo profile for testing Nearby — not a real member.',
+          genderIdentity: '',
+          orientationsShown: [],
+          orientationsSeeking: [],
+          lookingFor: demo.lookingFor,
+          photoUrls: [demo.photoUrl],
+          age: demo.age,
+          isVisible: true,
+          shareChatDistance: false,
+          lastActiveAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          exists: true,
+        },
+      };
+    }
+
     if (peerId === auth.userId) {
       const store = await getProfileStore();
       const record = await store.get(auth.userId);

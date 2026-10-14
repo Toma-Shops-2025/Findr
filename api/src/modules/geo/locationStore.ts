@@ -64,6 +64,7 @@ class MemoryLocationStore {
     longitude: number,
     radiusM: number,
     excludeUserId: string,
+    _candidateLimit = 200,
   ): Promise<Array<CoarseLocation & { distanceM: number }>> {
     const lat = coerceFloat(latitude, 'latitude');
     const lng = coerceFloat(longitude, 'longitude');
@@ -155,10 +156,12 @@ class PostgresLocationStore {
     longitude: number,
     radiusM: number,
     excludeUserId: string,
+    candidateLimit = 200,
   ): Promise<Array<CoarseLocation & { distanceM: number }>> {
     const lat = coerceFloat(latitude, 'latitude');
     const lng = coerceFloat(longitude, 'longitude');
     const radius = coerceFloat(radiusM, 'radiusM');
+    const limit = Math.min(Math.max(1, Math.floor(candidateLimit)), 300);
     const result = await this.pool.query(
       `SELECT user_id,
               ST_Y(geom::geometry) AS latitude,
@@ -177,8 +180,8 @@ class PostgresLocationStore {
            $4::float8
          )
        ORDER BY distance_m ASC
-       LIMIT 100`,
-      [lng, lat, excludeUserId, radius],
+       LIMIT $5`,
+      [lng, lat, excludeUserId, radius, limit],
     );
     return result.rows.map((row) => ({
       ...rowToLocation(row),

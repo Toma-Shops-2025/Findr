@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -17,6 +17,12 @@ import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { DEMO_COORDS, fuzzLatLng } from '@/lib/locationPrivacy';
 import { primaryPhotoUrl } from '@/lib/mediaUrl';
+import {
+  NEARBY_FETCH_LIMIT,
+  NEARBY_RADIUS_MILES,
+  buildNearbyGridRows,
+  type NearbyGridRow,
+} from '@/lib/nearbyGrid';
 import type { NearbyCard } from '@/lib/types';
 
 type NearbyResponse = {
@@ -74,6 +80,42 @@ async function resolveConsentedCoords(): Promise<{
       permissionDenied: false,
     };
   }
+}
+
+function NearbyCardCell({
+  item,
+  onToggleFavorite,
+}: {
+  item: NearbyCard;
+  onToggleFavorite: (item: NearbyCard) => void;
+}) {
+  return (
+    <Pressable
+      style={styles.card}
+      onPress={() => router.push('/user/' + item.userId)}
+    >
+      <View style={styles.photo}>
+        <NearbyPhoto item={item} />
+        {item.online ? <View style={styles.onlineDot} /> : null}
+        <Pressable
+          style={styles.favBtn}
+          onPress={() => onToggleFavorite(item)}
+          hitSlop={8}
+        >
+          <Text style={styles.favIcon}>
+            {item.isFavorite ? '★' : '☆'}
+          </Text>
+        </Pressable>
+      </View>
+      <Text style={styles.name} numberOfLines={1}>
+        {item.displayName}
+      </Text>
+      <Text style={styles.meta} numberOfLines={1}>
+        {item.age != null ? item.age + ' | ' : ''}
+        {item.distanceLabel}
+      </Text>
+    </Pressable>
+  );
 }
 
 function NearbyPhoto({ item }: { item: NearbyCard }) {
@@ -134,8 +176,8 @@ export default function NearbyScreen() {
         }
 
         const qs = new URLSearchParams({
-          radiusKm: '50',
-          limit: '50',
+          radiusMiles: String(NEARBY_RADIUS_MILES),
+          limit: String(NEARBY_FETCH_LIMIT),
         });
         if (onlineOnly) qs.set('onlineOnly', 'true');
         if (favoritesOnly) qs.set('favoritesOnly', 'true');
@@ -218,10 +260,14 @@ export default function NearbyScreen() {
     void loadNearby(true);
   }, [onlineOnly, favoritesOnly]);
 
+  const gridRows = useMemo(() => buildNearbyGridRows(items), [items]);
+
   return (
     <View style={styles.container}>
       <Text style={styles.brand}>Findr</Text>
-      <Text style={styles.sub}>Nearby — sorted by distance (fresh ~6h)</Text>
+      <Text style={styles.sub}>
+        Within {NEARBY_RADIUS_MILES} mi · closest first (fresh ~6h)
+      </Text>
       <View style={styles.filterRow}>
         <Pressable
           style={[styles.filterChip, onlineOnly && styles.filterChipOn]}
@@ -277,10 +323,8 @@ export default function NearbyScreen() {
       ) : null}
 
       <FlatList
-        data={items}
-        keyExtractor={(item) => item.userId}
-        numColumns={3}
-        columnWrapperStyle={styles.row}
+        data={gridRows}
+        keyExtractor={(row, index) => gridRowKey(row, index)}
         contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl
@@ -289,36 +333,51 @@ export default function NearbyScreen() {
             tintColor={colors.coral}
           />
         }
-        renderItem={({ item }) => (
-          <Pressable
-            style={styles.card}
-            onPress={() => router.push('/user/' + item.userId)}
-          >
-            <View style={styles.photo}>
-              <NearbyPhoto item={item} />
-              {item.online ? <View style={styles.onlineDot} /> : null}
-              <Pressable
-                style={styles.favBtn}
-                onPress={() => void toggleFavorite(item)}
-                hitSlop={8}
-              >
-                <Text style={styles.favIcon}>
-                  {item.isFavorite ? '★' : '☆'}
-                </Text>
-              </Pressable>
+        renderItem={({ item: row }) => {
+          if (row.kind === 'sectionTitle') {
+            return (
+              <Text style={styles.sectionTitle}>{row.title}</Text>
+            );
+          }
+          if (row.kind === 'separator') {
+            return (
+              <View style={styles.gridSeparator} accessibilityRole="text">
+                <View style={styles.gridSeparatorInner}>
+                  <Text style={styles.gridSeparatorBrand}>Findr</Text>
+                  <Text style={styles.gridSeparatorSub}>
+                    Discover more within {NEARBY_RADIUS_MILES} miles
+                  </Text>
+                </View>
+              </View>
+            );
+          }
+          const pads = 3 - row.cards.length;
+          return (
+            <View style={styles.row}>
+              {row.cards.map((card) => (
+                <NearbyCardCell
+                  key={card.userId}
+                  item={card}
+                  onToggleFavorite={(c) => void toggleFavorite(c)}
+                />
+              ))}
+              {pads > 0
+                ? Array.from({ length: pads }).map((_, i) => (
+                    <View key={`pad-${i}`} style={styles.cardPad} />
+                  ))
+                : null}
             </View>
-            <Text style={styles.name} numberOfLines={1}>
-              {item.displayName}
-            </Text>
-            <Text style={styles.meta} numberOfLines={1}>
-              {item.age != null ? item.age + ' | ' : ''}
-              {item.distanceLabel}
-            </Text>
-          </Pressable>
-        )}
+          );
+        }}
       />
     </View>
   );
+}
+
+function gridRowKey(row: NearbyGridRow, index: number): string {
+  if (row.kind === 'sectionTitle') return `title-${row.title}-${index}`;
+  if (row.kind === 'separator') return `sep-${index}`;
+  return `row-${row.cards.map((c) => c.userId).join('-')}`;
 }
 
 const styles = StyleSheet.create({
@@ -440,7 +499,43 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
     paddingTop: spacing.xs,
   },
+  sectionTitle: {
+    fontFamily: typography.heading,
+    color: colors.mist,
+    fontSize: 15,
+    paddingHorizontal: spacing.xs,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  gridSeparator: {
+    marginVertical: spacing.md,
+    paddingHorizontal: spacing.xs,
+  },
+  gridSeparatorInner: {
+    backgroundColor: colors.inkElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 72,
+  },
+  gridSeparatorBrand: {
+    fontFamily: typography.brand,
+    color: colors.coral,
+    fontSize: 18,
+  },
+  gridSeparatorSub: {
+    fontFamily: typography.body,
+    color: colors.mistMuted,
+    fontSize: 12,
+    marginTop: 4,
+    textAlign: 'center',
+  },
   row: {
+    flexDirection: 'row',
     gap: spacing.sm,
     marginBottom: spacing.sm,
   },
@@ -448,6 +543,10 @@ const styles = StyleSheet.create({
     flex: 1,
     maxWidth: '33.33%',
     gap: 2,
+  },
+  cardPad: {
+    flex: 1,
+    maxWidth: '33.33%',
   },
   photo: {
     aspectRatio: 3 / 4,

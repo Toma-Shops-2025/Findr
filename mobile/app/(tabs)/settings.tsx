@@ -211,10 +211,10 @@ export default function SettingsScreen() {
         />
       }
     >
-      <PolicyDisclaimerBanner variant="safety" />
+      <PolicyDisclaimerBanner />
 
       <Text style={styles.lead}>
-        Visibility, account, and safety tools. Findr is 18+ only.
+        Visibility, account, and safety tools.
       </Text>
 
       {user ? (

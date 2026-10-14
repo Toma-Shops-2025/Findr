@@ -5,7 +5,7 @@ export default function FaqScreen() {
     <LegalDocScreen
       title="FAQ & Safety"
       updated="2026-10-04"
-      intro="Quick answers about age, safety, reporting, and how Findr works during MVP. The coral notice at the top applies to these answers too — if we update policies, continued use means you accept the current version."
+      intro="Quick answers about age, safety, reporting, and how Findr works during MVP."
       sections={[
         {
           heading: 'Who can use Findr?',

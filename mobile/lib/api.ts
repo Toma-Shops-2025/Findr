@@ -26,11 +26,17 @@ export type ApiError = {
   message?: string;
 };
 
+const DEFAULT_FETCH_TIMEOUT_MS = 45_000;
+
 export async function apiFetch<T>(
   path: string,
-  options: RequestInit & { token?: string | null } = {},
+  options: RequestInit & {
+    token?: string | null;
+    timeoutMs?: number;
+  } = {},
 ): Promise<T> {
-  const { token, headers, body, ...rest } = options;
+  const { token, headers, body, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS, ...rest } =
+    options;
   const hdrs: Record<string, string> = {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
@@ -38,14 +44,30 @@ export async function apiFetch<T>(
   if (body !== undefined && body !== null && body !== '') {
     hdrs['Content-Type'] = 'application/json';
   }
-  const res = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...rest,
-    body,
-    headers: {
-      ...hdrs,
-      ...(headers as Record<string, string> | undefined),
-    },
-  });
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res: Response;
+  try {
+    res = await fetch(`${getApiBaseUrl()}${path}`, {
+      ...rest,
+      body,
+      signal: controller.signal,
+      headers: {
+        ...hdrs,
+        ...(headers as Record<string, string> | undefined),
+      },
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(
+        'Request timed out. Check your connection or try again in a moment.',
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 
   const data = (await res.json().catch(() => ({}))) as T & ApiError;
   if (!res.ok) {

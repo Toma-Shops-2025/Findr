@@ -20,7 +20,7 @@ import { useAuth } from '@/lib/auth';
 import { GOOGLE_ONLY_AUTH } from '@/lib/authUi';
 
 export default function LoginScreen() {
-  const { login, loginWithGoogle, requestPasswordReset } = useAuth();
+  const { login, requestPasswordReset } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showEmailLogin, setShowEmailLogin] = useState(!GOOGLE_ONLY_AUTH);
@@ -68,20 +68,7 @@ export default function LoginScreen() {
             : 'Sign in with Google or email until Google is fully verified on your build.'}
         </Text>
 
-        <GoogleSignInButton
-          onIdToken={async (token) => {
-            setBusy(true);
-            setError(null);
-            try {
-              await loginWithGoogle(token);
-              router.replace('/(tabs)/nearby');
-            } catch (err) {
-              setError((err as Error).message || 'Google sign-in failed');
-            } finally {
-              setBusy(false);
-            }
-          }}
-        />
+        <GoogleSignInButton />
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 

@@ -27,7 +27,7 @@ import { GOOGLE_ONLY_AUTH } from '@/lib/authUi';
  * screens (e.g. Galaxy S9) when the soft keyboard is open.
  */
 export default function OnboardingScreen() {
-  const { signup, loginWithGoogle } = useAuth();
+  const { signup } = useAuth();
   const [showEmailSignup, setShowEmailSignup] = useState(!GOOGLE_ONLY_AUTH);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -119,22 +119,7 @@ export default function OnboardingScreen() {
 
             <GoogleSignInButton
               label="Sign up with Google"
-              onIdToken={async (token) => {
-                if (!accepted) {
-                  setError('Accept Terms and Privacy Policy first.');
-                  return;
-                }
-                setBusy(true);
-                setError(null);
-                try {
-                  await loginWithGoogle(token);
-                  router.replace('/(tabs)/nearby');
-                } catch (err) {
-                  setError((err as Error).message || 'Google sign-up failed');
-                } finally {
-                  setBusy(false);
-                }
-              }}
+              disabled={!accepted}
             />
 
             {!GOOGLE_ONLY_AUTH ? (

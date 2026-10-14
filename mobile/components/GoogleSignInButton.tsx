@@ -1,30 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 
 import { colors, radii, spacing, typography } from '@/constants/theme';
-import { idTokenFromGoogleResponse, useGoogleAuthRequest } from '@/lib/googleAuth';
+import { useGoogleAuthRequest } from '@/lib/googleAuth';
 
 type Props = {
-  onIdToken: (idToken: string) => Promise<void>;
   label?: string;
+  disabled?: boolean;
 };
 
-export function GoogleSignInButton({ onIdToken, label = 'Continue with Google' }: Props) {
-  const { request, response, promptAsync, configured } = useGoogleAuthRequest();
+export function GoogleSignInButton({
+  label = 'Continue with Google',
+  disabled = false,
+}: Props) {
+  const { request, promptAsync, configured } = useGoogleAuthRequest();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const token = idTokenFromGoogleResponse(response);
-    if (!token) return;
-    setBusy(true);
-    setError(null);
-    void onIdToken(token)
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : 'Google sign-in failed');
-      })
-      .finally(() => setBusy(false));
-  }, [response, onIdToken]);
 
   if (!configured) {
     return null;
@@ -33,11 +24,18 @@ export function GoogleSignInButton({ onIdToken, label = 'Continue with Google' }
   return (
     <>
       <Pressable
-        style={[styles.btn, (!request || busy) && styles.btnDisabled]}
-        disabled={!request || busy}
+        style={[styles.btn, (!request || busy || disabled) && styles.btnDisabled]}
+        disabled={!request || busy || disabled}
         onPress={() => {
           setError(null);
-          void promptAsync();
+          setBusy(true);
+          void promptAsync()
+            .catch((err) => {
+              setError(
+                err instanceof Error ? err.message : 'Could not open Google sign-in',
+              );
+            })
+            .finally(() => setBusy(false));
         }}
       >
         {busy ? (

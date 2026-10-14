@@ -96,7 +96,8 @@ function NearbyPhoto({ item }: { item: NearbyCard }) {
 export default function NearbyScreen() {
   const { accessToken } = useAuth();
   const [items, setItems] = useState<NearbyCard[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modeNote, setModeNote] = useState<string | null>(null);
@@ -120,8 +121,6 @@ export default function NearbyScreen() {
           await resolveConsentedCoords();
         const fuzzed = fuzzLatLng(coords.latitude, coords.longitude);
 
-        // Lat/lng stay floats. accuracyM is also a float (meters) - API column
-        // is DOUBLE PRECISION after migration 007. Do not coerce to int.
         const body: {
           latitude: number;
           longitude: number;
@@ -134,22 +133,25 @@ export default function NearbyScreen() {
           body.accuracyM = coords.accuracyM;
         }
 
-        await apiFetch('/geo/location', {
-          method: 'POST',
-          token: accessToken,
-          body: JSON.stringify(body),
-        });
-
         const qs = new URLSearchParams({
           radiusKm: '50',
           limit: '50',
         });
         if (onlineOnly) qs.set('onlineOnly', 'true');
         if (favoritesOnly) qs.set('favoritesOnly', 'true');
-        const data = await apiFetch<NearbyResponse>(
-          `/geo/nearby?${qs.toString()}`,
-          { token: accessToken },
-        );
+        qs.set('latitude', String(fuzzed.latitude));
+        qs.set('longitude', String(fuzzed.longitude));
+
+        const [data] = await Promise.all([
+          apiFetch<NearbyResponse>(`/geo/nearby?${qs.toString()}`, {
+            token: accessToken,
+          }),
+          apiFetch('/geo/location', {
+            method: 'POST',
+            token: accessToken,
+            body: JSON.stringify(body),
+          }).catch(() => undefined),
+        ]);
         setItems(data.results || []);
 
         const notes: string[] = [];
@@ -179,6 +181,7 @@ export default function NearbyScreen() {
       } finally {
         setLoading(false);
         setRefreshing(false);
+        setInitialLoad(false);
       }
     },
     [accessToken, favoritesOnly, onlineOnly],
@@ -214,15 +217,6 @@ export default function NearbyScreen() {
     if (!accessToken || loading) return;
     void loadNearby(true);
   }, [onlineOnly, favoritesOnly]);
-
-  if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={colors.coral} />
-        <Text style={styles.sub}>Finding people near you...</Text>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
@@ -270,6 +264,15 @@ export default function NearbyScreen() {
           <Pressable style={styles.retry} onPress={() => loadNearby(true)}>
             <Text style={styles.retryText}>Refresh</Text>
           </Pressable>
+        </View>
+      ) : null}
+
+      {loading && items.length === 0 ? (
+        <View style={styles.inlineLoad}>
+          <ActivityIndicator color={colors.coral} />
+          <Text style={styles.sub}>
+            {initialLoad ? 'Finding people near you…' : 'Refreshing…'}
+          </Text>
         </View>
       ) : null}
 
@@ -322,6 +325,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.ink,
+  },
+  inlineLoad: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.lg,
+    gap: spacing.sm,
   },
   centered: {
     flex: 1,

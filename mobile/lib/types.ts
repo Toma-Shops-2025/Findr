@@ -62,6 +62,7 @@ export type ConversationSummary = {
   /** Primary peer photo URL when API provides it (Stage 2c+). */
   peerPhotoUrl?: string | null;
   lastMessagePreview: string | null;
+  lastMessageFromMe?: boolean;
   lastMessageAt: string | null;
   updatedAt: string;
   hasUnread?: boolean;

@@ -145,6 +145,10 @@ export default function LoginScreen() {
             </Pressable>
           </>
         ) : null}
+
+        <Link href="/(auth)/onboarding" style={styles.link}>
+          New here? Create an account
+        </Link>
       </View>
         </ScrollView>
       </KeyboardAvoidingView>

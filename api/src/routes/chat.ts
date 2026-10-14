@@ -70,6 +70,9 @@ async function toSummary(
     peerDisplayName: displayName,
     peerPhotoUrl: photoUrl,
     lastMessagePreview: conversation.lastMessagePreview,
+    lastMessageFromMe:
+      conversation.lastMessageSenderId != null &&
+      conversation.lastMessageSenderId === me,
     lastMessageAt: conversation.lastMessageAt,
     updatedAt: conversation.updatedAt,
     hasUnread: conversationHasUnread(conversation, me),

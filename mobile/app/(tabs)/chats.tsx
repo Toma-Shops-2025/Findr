@@ -17,6 +17,13 @@ import { useAuth } from '@/lib/auth';
 import { resolveMediaUrl } from '@/lib/mediaUrl';
 import type { ConversationSummary } from '@/lib/types';
 
+function formatPreview(item: ConversationSummary): string {
+  const raw = item.lastMessagePreview?.trim();
+  if (!raw) return 'Say hello';
+  if (item.lastMessageFromMe) return `You: ${raw}`;
+  return raw;
+}
+
 function formatTime(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
@@ -160,7 +167,7 @@ export default function ChatsScreen() {
                 </Text>
               </View>
               <Text style={styles.preview} numberOfLines={1}>
-                {item.lastMessagePreview ?? 'Say hello'}
+                {formatPreview(item)}
               </Text>
             </View>
           </Pressable>

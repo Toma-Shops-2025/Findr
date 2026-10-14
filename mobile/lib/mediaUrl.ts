@@ -1,14 +1,25 @@
 import { getApiBaseUrl } from '@/lib/api';
 
-/** Legacy full R2 URLs → API /uploads/ path (server redirects to object storage). */
-function rewriteLegacyObjectUrl(url: string): string {
-  const match = url.match(
-    /\/findr\/(profiles|chat|album|videos)\/([^/?#]+)$/i,
-  );
-  if (match) {
-    return `/uploads/${match[1]}/${match[2]}`;
+/** Map any known object-storage URL to API `/uploads/...` (RN Image/Video load from API, not R2 redirect). */
+function rewriteToUploadsPath(url: string): string {
+  const trimmed = url.trim();
+  if (trimmed.startsWith('/uploads/')) return trimmed;
+
+  // api.myfindr.fun/uploads/chat/foo.jpg
+  const apiUploads = trimmed.match(/\/uploads\/((?:profiles|chat|album|videos)\/[^/?#]+)/i);
+  if (apiUploads) return `/uploads/${apiUploads[1]}`;
+
+  // R2 public: .../findr/profiles/uuid.jpg
+  const r2Findr = trimmed.match(/\/findr\/(profiles|chat|album|videos)\/([^/?#]+)/i);
+  if (r2Findr) return `/uploads/${r2Findr[1]}/${r2Findr[2]}`;
+
+  // Legacy path without findr prefix
+  const bare = trimmed.match(/\/(profiles|chat|album|videos)\/([a-f0-9-]{36}\.[a-z0-9]+)/i);
+  if (bare && (trimmed.includes('r2.dev') || trimmed.includes('r2.cloudflarestorage'))) {
+    return `/uploads/${bare[1]}/${bare[2]}`;
   }
-  return url;
+
+  return trimmed;
 }
 
 /**
@@ -21,8 +32,9 @@ export function resolveMediaUrl(
   if (!url) return null;
   let trimmed = url.trim();
   if (!trimmed || trimmed.startsWith('stub:')) return null;
+
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    trimmed = rewriteLegacyObjectUrl(trimmed);
+    trimmed = rewriteToUploadsPath(trimmed);
     if (trimmed.startsWith('/')) {
       return `${getApiBaseUrl()}${trimmed}`;
     }

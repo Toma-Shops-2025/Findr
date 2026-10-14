@@ -44,6 +44,8 @@ export type ConversationSummary = {
   /** Primary peer photo (/uploads/... or https) for Chats list thumbs. */
   peerPhotoUrl: string | null;
   lastMessagePreview: string | null;
+  /** True when the signed-in user sent the latest message in the thread. */
+  lastMessageFromMe: boolean;
   lastMessageAt: string | null;
   updatedAt: string;
   hasUnread: boolean;

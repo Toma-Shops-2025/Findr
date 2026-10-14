@@ -1,4 +1,4 @@
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 export type ObjectStorageConfig = {
   bucket: string;
@@ -48,4 +48,22 @@ export async function uploadPublicObject(opts: {
   );
 
   return `${cfg.publicBaseUrl}/${opts.key}`;
+}
+
+/** Stream object bytes from R2/S3 (for /uploads proxy — RN Image often fails on 302 to R2). */
+export async function getPublicObject(
+  key: string,
+): Promise<{ body: NodeJS.ReadableStream; contentType: string } | null> {
+  const cfg = getObjectStorageConfig();
+  if (!cfg) return null;
+  try {
+    const res = await cfg.client.send(
+      new GetObjectCommand({ Bucket: cfg.bucket, Key: key }),
+    );
+    if (!res.Body) return null;
+    const contentType = res.ContentType ?? 'application/octet-stream';
+    return { body: res.Body as NodeJS.ReadableStream, contentType };
+  } catch {
+    return null;
+  }
 }

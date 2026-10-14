@@ -1,7 +1,7 @@
 import { createReadStream, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
-import { getObjectStorageConfig } from '../modules/media/objectStorage.js';
+import { getPublicObject } from '../modules/media/objectStorage.js';
 import { UPLOADS_DIR } from '../modules/media/storage.js';
 
 /**
@@ -35,10 +35,13 @@ export const uploadsRoutes: FastifyPluginAsync = async (app) => {
       return reply.type(mime).send(createReadStream(localPath));
     }
 
-    const cfg = getObjectStorageConfig();
-    if (cfg) {
-      const key = `findr/${rel}`;
-      return reply.redirect(`${cfg.publicBaseUrl}/${key}`);
+    const key = `findr/${rel}`;
+    const object = await getPublicObject(key);
+    if (object) {
+      return reply
+        .header('Cache-Control', 'public, max-age=86400')
+        .type(object.contentType)
+        .send(object.body);
     }
 
     return reply.code(404).send({ error: 'not_found' });

@@ -9,6 +9,7 @@ import { getLocationStore } from '../modules/geo/locationStore.js';
 import { sanitizeDisplayNameForPublic } from '../modules/profiles/publicDisplay.js';
 import { getProfileStore } from '../modules/profiles/profileStore.js';
 import { getBlockStore } from '../modules/safety/blockStore.js';
+import { getFavoriteStore } from '../modules/geo/favoriteStore.js';
 
 // Lat/lng/accuracy/radius are floats. Only limit (and age elsewhere) are ints.
 const locationSchema = z.object({
@@ -24,6 +25,16 @@ const nearbyQuerySchema = z.object({
   /** Optional client coords when the user has not POSTed /geo/location yet. */
   latitude: z.coerce.number().min(-90).max(90).optional(),
   longitude: z.coerce.number().min(-180).max(180).optional(),
+  onlineOnly: z
+    .enum(['true', 'false', '1', '0'])
+    .optional()
+    .transform((v) => v === 'true' || v === '1'),
+  favoritesOnly: z
+    .enum(['true', 'false', '1', '0'])
+    .optional()
+    .transform((v) => v === 'true' || v === '1'),
+  /** Comma-separated lookingFor values (dates,friends,casual,...). */
+  lookingFor: z.string().max(120).optional(),
 });
 
 export type NearbyCard = {
@@ -33,8 +44,10 @@ export type NearbyCard = {
   photoUrls: string[];
   lookingFor: string[];
   distanceLabel: string;
+  distanceM: number;
   /** Approximate only - never exact pin. */
   online: boolean;
+  isFavorite: boolean;
 };
 
 function fallbackDisplayName(email: string): string {
@@ -130,18 +143,32 @@ export const geoRoutes: FastifyPluginAsync = async (app) => {
     const blocks = await getBlockStore();
     const blocked = await blocks.blockedPairIds(auth.userId);
 
+    const favorites = await getFavoriteStore();
+    const favoriteIds = new Set(await favorites.list(auth.userId));
+    const lookingForFilter = parsed.data.lookingFor
+      ? parsed.data.lookingFor
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+
     const profiles = await getProfileStore();
     const users = await getUserStore();
     const results: NearbyCard[] = [];
 
     for (const loc of nearby) {
       if (blocked.has(loc.userId)) continue;
+      if (parsed.data.favoritesOnly && !favoriteIds.has(loc.userId)) continue;
 
       const profile = await profiles.get(loc.userId);
       if (profile && !profile.isVisible) continue;
 
       const user = await users.findById(loc.userId);
       if (!user) continue;
+
+      const photos = profile?.photoUrls ?? [];
+      const hasGridPhoto = photos.some((u) => (u ?? '').trim() && !u.startsWith('stub:'));
+      if (!hasGridPhoto) continue;
 
       const age = yearsSince(user.dateOfBirth);
       // Age-gate-only accounts (no DOB) still appear; UI shows 18+ floor.
@@ -156,15 +183,26 @@ export const geoRoutes: FastifyPluginAsync = async (app) => {
         : 0;
       const online =
         lastActive > 0 && Date.now() - lastActive < 15 * 60 * 1000;
+      if (parsed.data.onlineOnly && !online) continue;
+
+      const lookingFor = profile?.lookingFor ?? [];
+      if (
+        lookingForFilter.length > 0 &&
+        !lookingFor.some((lf) => lookingForFilter.includes(lf))
+      ) {
+        continue;
+      }
 
       results.push({
         userId: loc.userId,
         displayName,
         age: ageOut,
         photoUrls: profile?.photoUrls ?? [],
-        lookingFor: profile?.lookingFor ?? [],
+        lookingFor,
         distanceLabel: formatDistanceBand(loc.distanceM),
+        distanceM: Math.round(loc.distanceM),
         online,
+        isFavorite: favoriteIds.has(loc.userId),
       });
 
       if (results.length >= parsed.data.limit) break;
@@ -175,11 +213,55 @@ export const geoRoutes: FastifyPluginAsync = async (app) => {
       mode,
       radiusKm: parsed.data.radiusKm,
       count: results.length,
+      sortedBy: 'distance',
       ...(mode === 'memory'
         ? {
             note: 'In-memory geo (no PostGIS). Samples reset when the API process restarts.',
           }
         : {}),
     };
+  });
+
+  app.get('/favorites', async (req, reply) => {
+    const auth = await requireAuth(req, reply);
+    if (!auth) return;
+    const store = await getFavoriteStore();
+    const ids = await store.list(auth.userId);
+    return { favorites: ids };
+  });
+
+  app.post('/favorites/:userId', async (req, reply) => {
+    const auth = await requireAuth(req, reply);
+    if (!auth) return;
+    const params = z
+      .object({ userId: z.string().uuid().or(z.string().min(1).max(80)) })
+      .safeParse(req.params);
+    if (!params.success) {
+      return reply.code(400).send({ error: 'invalid_params' });
+    }
+    if (params.data.userId === auth.userId) {
+      return reply.code(400).send({ error: 'cannot_favorite_self' });
+    }
+    const users = await getUserStore();
+    if (!(await users.findById(params.data.userId))) {
+      return reply.code(404).send({ error: 'user_not_found' });
+    }
+    const store = await getFavoriteStore();
+    await store.add(auth.userId, params.data.userId);
+    return { ok: true };
+  });
+
+  app.delete('/favorites/:userId', async (req, reply) => {
+    const auth = await requireAuth(req, reply);
+    if (!auth) return;
+    const params = z
+      .object({ userId: z.string().uuid().or(z.string().min(1).max(80)) })
+      .safeParse(req.params);
+    if (!params.success) {
+      return reply.code(400).send({ error: 'invalid_params' });
+    }
+    const store = await getFavoriteStore();
+    await store.remove(auth.userId, params.data.userId);
+    return { ok: true };
   });
 };

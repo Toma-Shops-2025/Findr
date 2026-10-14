@@ -13,9 +13,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { GoogleSignInButton } from '@/components/GoogleSignInButton';
 import { PasswordField } from '@/components/PasswordField';
 import { colors, radii, spacing, typography } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
+import { GOOGLE_ONLY_AUTH } from '@/lib/authUi';
 
 /**
  * Signup + 18+ age gate + legal acceptances (no DOB on MVP signup).
@@ -25,7 +27,8 @@ import { useAuth } from '@/lib/auth';
  * screens (e.g. Galaxy S9) when the soft keyboard is open.
  */
 export default function OnboardingScreen() {
-  const { signup } = useAuth();
+  const { signup, loginWithGoogle } = useAuth();
+  const [showEmailSignup, setShowEmailSignup] = useState(!GOOGLE_ONLY_AUTH);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [accepted, setAccepted] = useState(false);
@@ -85,30 +88,8 @@ export default function OnboardingScreen() {
             <Text style={styles.brand}>Findr</Text>
             <Text style={styles.headline}>Meet people nearby - on your terms.</Text>
             <Text style={styles.support}>
-              Inclusive dating and hookups for adults of every orientation. Confirm you
-              are 18+ to create an account.
+              Inclusive dating for adults 18+. Sign up with Google (recommended) or email.
             </Text>
-
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="you@email.com"
-              placeholderTextColor={colors.mistMuted}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              autoComplete="email"
-              style={styles.input}
-              returnKeyType="next"
-            />
-
-            <Text style={styles.label}>Password</Text>
-            <PasswordField
-              value={password}
-              onChangeText={setPassword}
-              placeholder="At least 8 characters"
-              returnKeyType="done"
-            />
 
             <Pressable
               onPress={() => setAccepted((v) => !v)}
@@ -136,6 +117,59 @@ export default function OnboardingScreen() {
               </Text>
             </Pressable>
 
+            <GoogleSignInButton
+              label="Sign up with Google"
+              onIdToken={async (token) => {
+                if (!accepted) {
+                  setError('Accept Terms and Privacy Policy first.');
+                  return;
+                }
+                setBusy(true);
+                setError(null);
+                try {
+                  await loginWithGoogle(token);
+                  router.replace('/(tabs)/nearby');
+                } catch (err) {
+                  setError((err as Error).message || 'Google sign-up failed');
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            />
+
+            {!GOOGLE_ONLY_AUTH ? (
+              <Pressable onPress={() => setShowEmailSignup((v) => !v)}>
+                <Text style={styles.linkInline}>
+                  {showEmailSignup
+                    ? 'Hide email sign-up'
+                    : 'Sign up with email instead'}
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {showEmailSignup && !GOOGLE_ONLY_AUTH ? (
+              <>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder="you@email.com"
+              placeholderTextColor={colors.mistMuted}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              autoComplete="email"
+              style={styles.input}
+              returnKeyType="next"
+            />
+
+            <Text style={styles.label}>Password</Text>
+            <PasswordField
+              value={password}
+              onChangeText={setPassword}
+              placeholder="At least 8 characters"
+              returnKeyType="done"
+            />
+
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
             <Pressable
@@ -146,9 +180,15 @@ export default function OnboardingScreen() {
               {busy ? (
                 <ActivityIndicator color={colors.ink} />
               ) : (
-                <Text style={styles.ctaText}>Create account</Text>
+                <Text style={styles.ctaText}>Create account with email</Text>
               )}
             </Pressable>
+              </>
+            ) : null}
+
+            {!showEmailSignup && error ? (
+              <Text style={styles.error}>{error}</Text>
+            ) : null}
 
             <Link href="/(auth)/login" style={styles.link}>
               Already have an account? Log in
@@ -272,6 +312,13 @@ const styles = StyleSheet.create({
     fontFamily: typography.heading,
     color: colors.ink,
     fontSize: 16,
+  },
+  linkInline: {
+    fontFamily: typography.body,
+    fontSize: 14,
+    color: colors.teal,
+    textAlign: 'center',
+    marginVertical: spacing.sm,
   },
   link: {
     marginTop: spacing.sm,

@@ -1,8 +1,13 @@
 import { Tabs } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 
+import { GuidelinesAckModal } from '@/components/GuidelinesAckModal';
 import { TabBarSymbol } from '@/components/TabBarSymbol';
 import { colors, typography } from '@/constants/theme';
+import { apiFetch } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+import { registerFindrPushToken } from '@/lib/push';
 import { useChatUnreadCount } from '@/lib/useChatUnread';
 
 function TabLabel({ label, focused }: { label: string; focused: boolean }) {
@@ -21,8 +26,38 @@ function TabLabel({ label, focused }: { label: string; focused: boolean }) {
 
 export default function TabsLayout() {
   const unreadChats = useChatUnreadCount();
+  const { accessToken } = useAuth();
+  const [showGuidelines, setShowGuidelines] = useState(false);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    void registerFindrPushToken(accessToken);
+    void (async () => {
+      try {
+        const data = await apiFetch<{ acknowledged: boolean }>(
+          '/profiles/me/guidelines',
+          { token: accessToken },
+        );
+        if (!data.acknowledged) setShowGuidelines(true);
+      } catch {
+        setShowGuidelines(true);
+      }
+    })();
+  }, [accessToken]);
 
   return (
+    <>
+    <GuidelinesAckModal
+      visible={showGuidelines}
+      onAccept={() => {
+        setShowGuidelines(false);
+        if (!accessToken) return;
+        void apiFetch('/profiles/me/ack-guidelines', {
+          method: 'POST',
+          token: accessToken,
+        });
+      }}
+    />
     <Tabs
       screenOptions={{
         headerStyle: { backgroundColor: colors.ink },
@@ -81,6 +116,7 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+    </>
   );
 }
 

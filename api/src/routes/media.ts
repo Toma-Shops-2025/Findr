@@ -24,6 +24,7 @@ import {
   type UploadKind,
 } from '../modules/media/storage.js';
 import { getProfileStore } from '../modules/profiles/profileStore.js';
+import { assertProfileGridUploadAllowed } from '../modules/media/gridModeration.js';
 
 const kindSchema = z.enum(['profile', 'chat', 'album']);
 const sourceSchema = z.enum(['upload', 'chat', 'camera', 'profile', 'album']);
@@ -150,6 +151,22 @@ export const mediaRoutes: FastifyPluginAsync = async (app) => {
         filename: data.filename,
         mimetype: data.mimetype,
       });
+
+      if (kind === 'profile') {
+        try {
+          assertProfileGridUploadAllowed(saved.mediaType, saved.bytes);
+        } catch (err) {
+          const code = (err as { code?: string }).code;
+          if (code === 'profile_grid_no_video' || code === 'profile_grid_too_small') {
+            return reply.code(400).send({
+              error: code,
+              message:
+                'Profile grid photos must be a clear image (any non-explicit photo is OK).',
+            });
+          }
+          throw err;
+        }
+      }
 
       if (!isAllowedUploadUrl(saved.relativeUrl)) {
         return reply.code(500).send({ error: 'invalid_url' });

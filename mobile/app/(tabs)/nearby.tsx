@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -96,10 +96,13 @@ function NearbyPhoto({ item }: { item: NearbyCard }) {
 export default function NearbyScreen() {
   const { accessToken } = useAuth();
   const [items, setItems] = useState<NearbyCard[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modeNote, setModeNote] = useState<string | null>(null);
+  const [onlineOnly, setOnlineOnly] = useState(false);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
 
   const loadNearby = useCallback(
     async (isRefresh = false) => {
@@ -118,8 +121,6 @@ export default function NearbyScreen() {
           await resolveConsentedCoords();
         const fuzzed = fuzzLatLng(coords.latitude, coords.longitude);
 
-        // Lat/lng stay floats. accuracyM is also a float (meters) - API column
-        // is DOUBLE PRECISION after migration 007. Do not coerce to int.
         const body: {
           latitude: number;
           longitude: number;
@@ -132,16 +133,25 @@ export default function NearbyScreen() {
           body.accuracyM = coords.accuracyM;
         }
 
-        await apiFetch('/geo/location', {
-          method: 'POST',
-          token: accessToken,
-          body: JSON.stringify(body),
+        const qs = new URLSearchParams({
+          radiusKm: '50',
+          limit: '50',
         });
+        if (onlineOnly) qs.set('onlineOnly', 'true');
+        if (favoritesOnly) qs.set('favoritesOnly', 'true');
+        qs.set('latitude', String(fuzzed.latitude));
+        qs.set('longitude', String(fuzzed.longitude));
 
-        const data = await apiFetch<NearbyResponse>(
-          '/geo/nearby?radiusKm=50&limit=50',
-          { token: accessToken },
-        );
+        const [data] = await Promise.all([
+          apiFetch<NearbyResponse>(`/geo/nearby?${qs.toString()}`, {
+            token: accessToken,
+          }),
+          apiFetch('/geo/location', {
+            method: 'POST',
+            token: accessToken,
+            body: JSON.stringify(body),
+          }).catch(() => undefined),
+        ]);
         setItems(data.results || []);
 
         const notes: string[] = [];
@@ -171,10 +181,31 @@ export default function NearbyScreen() {
       } finally {
         setLoading(false);
         setRefreshing(false);
+        setInitialLoad(false);
       }
     },
-    [accessToken],
+    [accessToken, favoritesOnly, onlineOnly],
   );
+
+  const toggleFavorite = async (item: NearbyCard) => {
+    if (!accessToken) return;
+    const isFav = Boolean(item.isFavorite);
+    try {
+      await apiFetch(`/geo/favorites/${item.userId}`, {
+        method: isFav ? 'DELETE' : 'POST',
+        token: accessToken,
+      });
+      setItems((prev) =>
+        prev.map((row) =>
+          row.userId === item.userId
+            ? { ...row, isFavorite: !isFav }
+            : row,
+        ),
+      );
+    } catch {
+      // ignore transient errors
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -182,19 +213,37 @@ export default function NearbyScreen() {
     }, [loadNearby]),
   );
 
-  if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={colors.coral} />
-        <Text style={styles.sub}>Finding people near you...</Text>
-      </View>
-    );
-  }
+  useEffect(() => {
+    if (!accessToken || loading) return;
+    void loadNearby(true);
+  }, [onlineOnly, favoritesOnly]);
 
   return (
     <View style={styles.container}>
       <Text style={styles.brand}>Findr</Text>
-      <Text style={styles.sub}>Nearby - distances are approximate</Text>
+      <Text style={styles.sub}>Nearby — sorted by distance (fresh ~6h)</Text>
+      <View style={styles.filterRow}>
+        <Pressable
+          style={[styles.filterChip, onlineOnly && styles.filterChipOn]}
+          onPress={() => setOnlineOnly((v) => !v)}
+        >
+          <Text
+            style={[styles.filterText, onlineOnly && styles.filterTextOn]}
+          >
+            Online
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.filterChip, favoritesOnly && styles.filterChipOn]}
+          onPress={() => setFavoritesOnly((v) => !v)}
+        >
+          <Text
+            style={[styles.filterText, favoritesOnly && styles.filterTextOn]}
+          >
+            Favorites
+          </Text>
+        </Pressable>
+      </View>
       {modeNote ? <Text style={styles.note}>{modeNote}</Text> : null}
       {error ? (
         <View style={styles.stateBox}>
@@ -215,6 +264,15 @@ export default function NearbyScreen() {
           <Pressable style={styles.retry} onPress={() => loadNearby(true)}>
             <Text style={styles.retryText}>Refresh</Text>
           </Pressable>
+        </View>
+      ) : null}
+
+      {loading && items.length === 0 ? (
+        <View style={styles.inlineLoad}>
+          <ActivityIndicator color={colors.coral} />
+          <Text style={styles.sub}>
+            {initialLoad ? 'Finding people near you…' : 'Refreshing…'}
+          </Text>
         </View>
       ) : null}
 
@@ -239,6 +297,15 @@ export default function NearbyScreen() {
             <View style={styles.photo}>
               <NearbyPhoto item={item} />
               {item.online ? <View style={styles.onlineDot} /> : null}
+              <Pressable
+                style={styles.favBtn}
+                onPress={() => void toggleFavorite(item)}
+                hitSlop={8}
+              >
+                <Text style={styles.favIcon}>
+                  {item.isFavorite ? '★' : '☆'}
+                </Text>
+              </Pressable>
             </View>
             <Text style={styles.name} numberOfLines={1}>
               {item.displayName}
@@ -259,6 +326,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.ink,
   },
+  inlineLoad: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.lg,
+    gap: spacing.sm,
+  },
   centered: {
     flex: 1,
     backgroundColor: colors.ink,
@@ -273,6 +346,43 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  filterChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.lg,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  filterChipOn: {
+    borderColor: colors.coral,
+    backgroundColor: 'rgba(255,107,74,0.15)',
+  },
+  filterText: {
+    color: colors.mistMuted,
+    fontSize: 13,
+    fontFamily: typography.bodyMedium,
+  },
+  filterTextOn: {
+    color: colors.coral,
+  },
+  favBtn: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 12,
+    paddingHorizontal: 4,
+  },
+  favIcon: {
+    color: colors.coral,
+    fontSize: 14,
   },
   sub: {
     fontFamily: typography.body,

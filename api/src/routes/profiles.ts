@@ -193,6 +193,21 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     if (parsed.data.age !== undefined) {
       update.age = parsed.data.age;
     }
+    const nextPhotos =
+      parsed.data.photoUrls !== undefined
+        ? parsed.data.photoUrls
+        : existing?.photoUrls ?? [];
+    const wantsVisible =
+      parsed.data.isVisible !== undefined
+        ? parsed.data.isVisible
+        : existing?.isVisible !== false;
+    if (wantsVisible && nextPhotos.filter((u) => (u ?? '').trim()).length < 1) {
+      return reply.code(400).send({
+        error: 'profile_photo_required',
+        message:
+          'Add at least one profile photo to appear on the grid. Any non-explicit image is fine (avatar, landscape, etc.).',
+      });
+    }
     if (parsed.data.isVisible !== undefined) {
       update.isVisible = parsed.data.isVisible;
     }
@@ -202,6 +217,38 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     const record = await store.upsert(auth.userId, update);
 
     return {
+      profile: toPublicProfile(record, auth.userId, auth.user.dateOfBirth),
+    };
+  });
+
+  app.get('/me/guidelines', async (req, reply) => {
+    const auth = await requireAuth(req, reply);
+    if (!auth) return;
+    const pool = await import('../modules/db.js').then((m) => m.getPool());
+    if (!pool) return { acknowledged: false };
+    const res = await pool.query(
+      `SELECT guidelines_ack_at FROM profiles WHERE user_id = $1 LIMIT 1`,
+      [auth.userId],
+    );
+    return { acknowledged: Boolean(res.rows[0]?.guidelines_ack_at) };
+  });
+
+  app.post('/me/ack-guidelines', async (req, reply) => {
+    const auth = await requireAuth(req, reply);
+    if (!auth) return;
+
+    const pool = await import('../modules/db.js').then((m) => m.getPool());
+    if (pool) {
+      await pool.query(
+        `UPDATE profiles SET guidelines_ack_at = NOW(), updated_at = NOW()
+         WHERE user_id = $1`,
+        [auth.userId],
+      );
+    }
+    const store = await getProfileStore();
+    const record = await store.get(auth.userId);
+    return {
+      ok: true,
       profile: toPublicProfile(record, auth.userId, auth.user.dateOfBirth),
     };
   });

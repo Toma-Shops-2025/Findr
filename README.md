@@ -69,6 +69,26 @@ docker compose exec -T db psql -U findr -d findr < db/migrations/001_init.sql
 
 Connection string: `postgres://findr:findr@localhost:5432/findr`
 
+### Production migrations (Render)
+
+Check which SQL files are applied:
+
+```powershell
+cd C:\Users\SexyMimi\Findr\api
+$env:DATABASE_URL = "<render-external-database-url>"
+node ..\db\scripts\migration-status.mjs
+```
+
+Apply only pending migrations:
+
+```powershell
+node ..\db\scripts\apply-pending-migrations.mjs
+```
+
+See also `docs/engineering-hygiene.md` and `docs/founder-alerts.md`.
+
+**Note:** The folder `src/` at repo root is a legacy web mock — the real app is `mobile/`.
+
 ## 3) Run the Android app (Expo Go on Galaxy S9)
 
 ```powershell

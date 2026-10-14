@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { InteractionManager } from 'react-native';
 
+import { EPHEMERAL_SESSION } from '@/lib/ephemeralSession';
 import {
   clearSession,
   loadSession,
@@ -104,6 +105,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (async () => {
       let stored: AuthSession | null = null;
       try {
+        if (EPHEMERAL_SESSION) {
+          await clearSession();
+        }
         stored = await loadSession();
         if (!cancelled && stored) setSession(stored);
       } catch (err) {
@@ -161,22 +165,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       method: 'POST',
       body: JSON.stringify(input),
     });
-    await saveSession(data);
+    await clearSession();
+    await saveSession(data, { persist: false });
     setSession(data);
   }, []);
 
   const login = useCallback(async (input: LoginInput) => {
-    const { staySignedIn = true, email, password } = input;
+    const { email, password } = input;
     const data = await apiFetchLazy<AuthSession>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-    if (staySignedIn) {
-      await saveSession(data);
-    } else {
-      await clearSession();
-      await saveSession(data, { persist: false });
-    }
+    await clearSession();
+    await saveSession(data, { persist: false });
     setSession(data);
   }, []);
 
@@ -190,7 +191,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         privacyAccepted: true,
       }),
     });
-    await saveSession(data);
+    await clearSession();
+    await saveSession(data, { persist: false });
     setSession(data);
   }, []);
 

@@ -46,6 +46,12 @@ function errorCode(err: unknown): string | undefined {
  */
 export const authRoutes: FastifyPluginAsync = async (app) => {
   app.post('/signup', async (req, reply) => {
+    if (process.env.DISABLE_EMAIL_SIGNUP === 'true') {
+      return reply.code(403).send({
+        error: 'email_signup_disabled',
+        message: 'New accounts use Google Sign-In. Existing email users can still log in.',
+      });
+    }
     const parsed = signupSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({

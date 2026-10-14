@@ -437,6 +437,13 @@ const styles = StyleSheet.create({
   },
   initial: { fontFamily: typography.brand, fontSize: 48, color: colors.coral },
   name: { fontFamily: typography.heading, fontSize: 24, color: colors.mist },
+  photoHint: {
+    fontFamily: typography.body,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.mistMuted,
+    marginBottom: spacing.sm,
+  },
   meta: {
     fontFamily: typography.body,
     color: colors.mistMuted,

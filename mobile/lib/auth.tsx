@@ -11,6 +11,7 @@ import { InteractionManager } from 'react-native';
 
 import { GoogleAuthSessionHandler } from '@/components/GoogleAuthSessionHandler';
 import { EPHEMERAL_SESSION } from '@/lib/ephemeralSession';
+import { GoogleAuthProvider } from '@/lib/googleAuthContext';
 import {
   clearSession,
   loadSession,
@@ -234,8 +235,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={value}>
-      <GoogleAuthSessionHandler />
-      {children}
+      <GoogleAuthProvider>
+        <GoogleAuthSessionHandler />
+        {children}
+      </GoogleAuthProvider>
     </AuthContext.Provider>
   );
 }

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 
 import { colors, radii, spacing, typography } from '@/constants/theme';
-import { useGoogleAuthRequest } from '@/lib/googleAuth';
+import { useGoogleAuthSession } from '@/lib/googleAuthContext';
 
 type Props = {
   label?: string;
@@ -13,7 +13,7 @@ export function GoogleSignInButton({
   label = 'Continue with Google',
   disabled = false,
 }: Props) {
-  const { request, promptAsync, configured } = useGoogleAuthRequest();
+  const { request, promptAsync, configured } = useGoogleAuthSession();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

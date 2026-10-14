@@ -1,5 +1,6 @@
 import { Link, router } from 'expo-router';
-import { useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -18,6 +19,7 @@ import { GoogleSignInButton } from '@/components/GoogleSignInButton';
 import { colors, radii, spacing, typography } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
 import { GOOGLE_ONLY_AUTH } from '@/lib/authUi';
+import { consumeLastGoogleAuthError } from '@/lib/googleAuthErrors';
 
 export default function LoginScreen() {
   const { login, requestPasswordReset } = useAuth();
@@ -28,6 +30,13 @@ export default function LoginScreen() {
   const [busy, setBusy] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [resetBusy, setResetBusy] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      const googleErr = consumeLastGoogleAuthError();
+      if (googleErr) setError(googleErr);
+    }, []),
+  );
 
   const onLogin = async () => {
     setError(null);

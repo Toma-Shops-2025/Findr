@@ -1,5 +1,6 @@
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { COMMUNITY_GUIDELINES_PARAGRAPHS } from '@/lib/communityGuidelines';
 import { colors, radii, spacing, typography } from '@/constants/theme';
 
 type Props = {
@@ -17,16 +18,11 @@ export function GuidelinesAckModal({ visible, onAccept }: Props) {
         <View style={styles.card}>
           <ScrollView showsVerticalScrollIndicator={false}>
             <Text style={styles.title}>Community guidelines</Text>
-            <Text style={styles.body}>
-              Findr is 18+ only. Be respectful. No minors, threats, hate, or
-              non-consensual images. Profile grid photos must not be explicit;
-              chat media between adults is your choice — block anyone who crosses
-              your boundaries.
-            </Text>
-            <Text style={styles.body}>
-              Report and block are in every profile and chat. We review reports
-              and may hide or remove accounts that break these rules.
-            </Text>
+            {COMMUNITY_GUIDELINES_PARAGRAPHS.map((paragraph) => (
+              <Text key={paragraph.slice(0, 24)} style={styles.body}>
+                {paragraph}
+              </Text>
+            ))}
           </ScrollView>
           <Pressable style={styles.btn} onPress={onAccept}>
             <Text style={styles.btnText}>I agree — continue</Text>

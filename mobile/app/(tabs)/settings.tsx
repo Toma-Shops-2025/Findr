@@ -14,7 +14,7 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { PolicyDisclaimerBanner } from '@/components/PolicyDisclaimerBanner';
+import { CommunityGuidelinesBanner } from '@/components/CommunityGuidelinesBanner';
 import { colors, radii, spacing, typography } from '@/constants/theme';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -25,7 +25,7 @@ const SUPPORT_EMAIL = 'contactus@myfindr.fun';
 const DELETE_ACCOUNT_URL = 'https://myfindr.fun/delete-account/';
 
 /**
- * Settings + blocked list / unblock + visibility + delete + logout.
+ * Settings + blocked list / unblock + visibility + delete.
  * Tab title: Safety. Must scroll above the bottom tab bar.
  * Stage 1: ASCII-only user strings (no em dash / middle dot).
  */
@@ -186,11 +186,6 @@ export default function SettingsScreen() {
     );
   };
 
-  const onLogout = async () => {
-    await logout();
-    router.replace('/(auth)/login');
-  };
-
   // Tab bar (~56) + home indicator so Legal & help / FAQ & Safety stay reachable.
   const bottomPad = Math.max(insets.bottom, 8) + 72;
 
@@ -212,7 +207,7 @@ export default function SettingsScreen() {
         />
       }
     >
-      <PolicyDisclaimerBanner />
+      <CommunityGuidelinesBanner />
 
       <Text style={styles.lead}>
         Visibility, account, and safety tools.
@@ -325,10 +320,13 @@ export default function SettingsScreen() {
           Permanent | or {DELETE_ACCOUNT_URL.replace('https://', '')}
         </Text>
       </Pressable>
-      <Pressable style={[styles.row, styles.logout]} onPress={onLogout}>
-        <Text style={styles.rowTitle}>Log out</Text>
-        <Text style={styles.rowMeta}>Signs you out on this device.</Text>
-      </Pressable>
+      <View style={[styles.row, styles.signOutNote]}>
+        <Text style={styles.rowTitle}>Signing out</Text>
+        <Text style={styles.rowMeta}>
+          Close Findr completely (swipe it away from recent apps). Your session
+          ends on this device until you sign in again.
+        </Text>
+      </View>
     </ScrollView>
   );
 }
@@ -441,7 +439,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.md,
   },
-  logout: {
+  signOutNote: {
     marginTop: spacing.md,
   },
   rowTitle: {

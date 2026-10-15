@@ -11,9 +11,9 @@ import {
 /** Local disk root for MVP uploads. Play Store should switch to S3/CDN later. */
 export const UPLOADS_DIR = join(process.cwd(), 'uploads');
 
-/** Photos: 8MB. Short videos: 25MB / 30s (client enforces duration; server enforces size). */
+/** Photos: 8MB. Short videos: 80MB / 30s (client enforces duration; server enforces size). */
 export const PHOTO_MAX_BYTES = 8 * 1024 * 1024;
-export const VIDEO_MAX_BYTES = 25 * 1024 * 1024;
+export const VIDEO_MAX_BYTES = 80 * 1024 * 1024;
 export const VIDEO_MAX_DURATION_MS = 30_000;
 
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);

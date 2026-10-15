@@ -541,10 +541,10 @@ function ChatBubbleVideo({
   const player = useVideoPlayer(uri, (p) => {
     p.loop = false;
   });
-  const inlineRef = useRef<VideoViewType>(null);
   const fullscreenRef = useRef<VideoViewType>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const lastTapRef = useRef(0);
+  const longPressLockRef = useRef(false);
 
   const onVideoPress = () => {
     const now = Date.now();
@@ -562,24 +562,41 @@ function ChatBubbleVideo({
   };
 
   const openFullscreen = async () => {
-    setFullscreen(true);
-    await fullscreenRef.current?.enterFullscreen();
+    if (longPressLockRef.current) return;
+    longPressLockRef.current = true;
+    try {
+      setFullscreen(true);
+      await fullscreenRef.current?.enterFullscreen();
+    } finally {
+      setTimeout(() => {
+        longPressLockRef.current = false;
+      }, 600);
+    }
   };
+
+  const flatStyle = StyleSheet.flatten(style) ?? {};
 
   return (
     <>
-      <Pressable onPress={onVideoPress} onLongPress={() => void openFullscreen()}>
+      <View style={[flatStyle, styles.videoWrap]}>
         <VideoView
-          ref={inlineRef}
           player={player}
-          style={style}
-          nativeControls
+          style={styles.videoFill}
+          nativeControls={false}
           contentFit="cover"
           surfaceType="textureView"
-          fullscreenOptions={{ enable: true }}
         />
-        <Text style={styles.videoHint}>Tap play · Long-press fullscreen</Text>
-      </Pressable>
+        <Pressable
+          style={styles.videoTouchOverlay}
+          onPress={onVideoPress}
+          onLongPress={() => void openFullscreen()}
+          delayLongPress={400}
+          accessibilityLabel="Play or pause video. Long press for fullscreen."
+        />
+        <Text style={styles.videoHint} pointerEvents="none">
+          Tap to play · Long-press fullscreen
+        </Text>
+      </View>
       <Modal
         visible={fullscreen}
         animationType="fade"
@@ -708,13 +725,27 @@ const styles = StyleSheet.create({
     height: 165,
     borderRadius: radii.md,
     backgroundColor: colors.ink,
+  },
+  videoWrap: {
+    overflow: 'hidden',
     marginBottom: spacing.xs,
   },
+  videoFill: {
+    width: '100%',
+    height: '100%',
+  },
+  videoTouchOverlay: {
+    ...StyleSheet.absoluteFill,
+  },
   videoHint: {
+    position: 'absolute',
+    bottom: 6,
+    left: 8,
+    right: 8,
     fontFamily: typography.body,
     fontSize: 11,
     color: colors.mistMuted,
-    marginBottom: spacing.xs,
+    textAlign: 'center',
   },
   videoModalBackdrop: {
     flex: 1,

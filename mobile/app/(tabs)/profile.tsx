@@ -299,7 +299,7 @@ export default function ProfileScreen() {
           : '18+ attested | add age below'}
       </Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Text style={styles.label}>Age</Text>
+      <Text style={styles.label}>Age (optional)</Text>
       <TextInput
         style={styles.input}
         value={ageText}
@@ -309,7 +309,7 @@ export default function ProfileScreen() {
         keyboardType="number-pad"
         maxLength={3}
       />
-      <Text style={styles.label}>Display name</Text>
+      <Text style={styles.label}>Display name (required)</Text>
       <TextInput
         style={styles.input}
         value={displayName}
@@ -318,7 +318,7 @@ export default function ProfileScreen() {
         placeholderTextColor={colors.mistMuted}
         maxLength={40}
       />
-      <Text style={styles.label}>Bio</Text>
+      <Text style={styles.label}>Bio (optional)</Text>
       <TextInput
         style={[styles.input, styles.bio]}
         value={bio}
@@ -328,7 +328,7 @@ export default function ProfileScreen() {
         multiline
         maxLength={500}
       />
-      <Text style={styles.label}>Gender identity</Text>
+      <Text style={styles.label}>Gender identity (optional)</Text>
       <TextInput
         style={styles.input}
         value={genderIdentity}
@@ -336,7 +336,7 @@ export default function ProfileScreen() {
         placeholder="e.g. Woman, Man, Non-binary"
         placeholderTextColor={colors.mistMuted}
       />
-      <Text style={styles.label}>Orientations shown (comma-separated)</Text>
+      <Text style={styles.label}>Orientations shown (optional)</Text>
       <TextInput
         style={styles.input}
         value={orientationsShown}
@@ -344,7 +344,7 @@ export default function ProfileScreen() {
         placeholder="e.g. Bi, Queer"
         placeholderTextColor={colors.mistMuted}
       />
-      <Text style={styles.label}>Orientations seeking (comma-separated)</Text>
+      <Text style={styles.label}>Orientations seeking (optional)</Text>
       <TextInput
         style={styles.input}
         value={orientationsSeeking}
@@ -352,7 +352,7 @@ export default function ProfileScreen() {
         placeholder="Who you are open to meeting"
         placeholderTextColor={colors.mistMuted}
       />
-      <Text style={styles.label}>Looking for</Text>
+      <Text style={styles.label}>Looking for (optional)</Text>
       <View style={styles.chips}>
         {LOOKING_FOR_OPTIONS.map((option) => {
           const selected = lookingFor.includes(option);

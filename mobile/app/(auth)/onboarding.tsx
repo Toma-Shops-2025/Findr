@@ -88,7 +88,9 @@ export default function OnboardingScreen() {
             <Text style={styles.brand}>Findr</Text>
             <Text style={styles.headline}>Meet people nearby - on your terms.</Text>
             <Text style={styles.support}>
-              Inclusive dating for adults 18+. Sign up with Google (recommended) or email.
+              {GOOGLE_ONLY_AUTH
+                ? 'Inclusive dating for adults 18+. Sign up with Google.'
+                : 'Inclusive dating for adults 18+. Sign up with Google (recommended) or email.'}
             </Text>
 
             <Pressable

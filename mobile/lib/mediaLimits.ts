@@ -1,6 +1,7 @@
 /** Findr media limits (keep in sync with api/src/modules/media/storage.ts). */
 export const PHOTO_MAX_BYTES = 8 * 1024 * 1024;
-export const VIDEO_MAX_BYTES = 25 * 1024 * 1024;
+/** ~30s phone video can exceed 25MB; album + chat share this cap. */
+export const VIDEO_MAX_BYTES = 80 * 1024 * 1024;
 export const VIDEO_MAX_DURATION_SEC = 30;
 export const VIDEO_MAX_DURATION_MS = VIDEO_MAX_DURATION_SEC * 1000;
 

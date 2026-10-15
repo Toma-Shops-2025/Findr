@@ -53,7 +53,7 @@ async function makeAlbumRoomForChat(
  *
  * Limits:
  *   photo  8MB
- *   video  25MB, max 30s (duration_ms form field; client-enforced on record)
+ *   video  80MB, max 30s (duration_ms form field; client-enforced on record)
  */
 export const mediaRoutes: FastifyPluginAsync = async (app) => {
   await app.register(multipart, {

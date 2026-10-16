@@ -17,6 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { colors, radii, spacing, typography } from '@/constants/theme';
 import { apiFetch, apiUploadImage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { AdPlaceholderBand } from '@/components/AdPlaceholderBand';
 import { ProfilePhotoGallery } from '@/components/ProfilePhotoGallery';
 import { PROFILE_MAX_PHOTOS } from '@/lib/mediaLimits';
 import { LOOKING_FOR_OPTIONS, type LookingFor, type PublicProfile } from '@/lib/types';
@@ -39,6 +40,8 @@ export default function ProfileScreen() {
   const [ageText, setAgeText] = useState('');
   const [isVisible, setIsVisible] = useState(true);
   const [shareChatDistance, setShareChatDistance] = useState(true);
+  const [freeToMeetActive, setFreeToMeetActive] = useState(false);
+  const [freeToMeetSaving, setFreeToMeetSaving] = useState(false);
   const [age, setAge] = useState<number | null>(null);
 
   const applyProfile = useCallback((p: PublicProfile) => {
@@ -51,6 +54,7 @@ export default function ProfileScreen() {
     setPhotoUrls(p.photoUrls || []);
     setIsVisible(p.isVisible !== false);
     setShareChatDistance(p.shareChatDistance !== false);
+    setFreeToMeetActive(Boolean(p.freeToMeetActive));
     setAge(p.age != null ? p.age : null);
     setAgeText(p.age != null ? String(p.age) : '');
   }, []);
@@ -386,6 +390,45 @@ export default function ProfileScreen() {
       </View>
       <View style={styles.row}>
         <View style={{ flex: 1 }}>
+          <Text style={styles.label}>Free to meet (3 hours)</Text>
+          <Text style={styles.metaInline}>
+            Shows on Nearby when you are open to meeting soon |{' '}
+            {freeToMeetActive ? 'On' : 'Off'}
+          </Text>
+        </View>
+        <Switch
+          value={freeToMeetActive}
+          onValueChange={(next) => {
+            if (!accessToken || freeToMeetSaving) return;
+            setFreeToMeetSaving(true);
+            void (async () => {
+              try {
+                const data = await apiFetch<{ profile: PublicProfile }>(
+                  '/profiles/me/free-to-meet',
+                  {
+                    method: 'POST',
+                    token: accessToken,
+                    body: JSON.stringify({ hours: next ? 3 : 0 }),
+                  },
+                );
+                setFreeToMeetActive(Boolean(data.profile?.freeToMeetActive));
+              } catch (err) {
+                Alert.alert(
+                  'Could not update',
+                  err instanceof Error ? err.message : 'Try again',
+                );
+              } finally {
+                setFreeToMeetSaving(false);
+              }
+            })();
+          }}
+          disabled={freeToMeetSaving}
+          trackColor={{ false: colors.border, true: colors.coral }}
+          thumbColor={colors.mist}
+        />
+      </View>
+      <View style={styles.row}>
+        <View style={{ flex: 1 }}>
           <Text style={styles.label}>Distance in chat</Text>
           <Text style={styles.metaInline}>
             Let others see how far you are in 1:1 chat |{' '}
@@ -406,6 +449,7 @@ export default function ProfileScreen() {
       >
         <Text style={styles.saveText}>{saving ? 'Saving...' : 'Save profile'}</Text>
       </Pressable>
+      <AdPlaceholderBand context="Profile" />
     </ScrollView>
   );
 }

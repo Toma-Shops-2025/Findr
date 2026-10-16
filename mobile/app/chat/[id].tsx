@@ -414,6 +414,14 @@ export default function ChatThreadScreen() {
     ]);
   };
 
+  const openCallsMenu = () => {
+    Alert.alert(
+      'Voice and video calls',
+      'Live voice and video in chat are coming soon. For now, share location or message to plan a meetup.',
+      [{ text: 'OK' }],
+    );
+  };
+
   const openAttachMenu = () => {
     if (!id || sending) return;
     Alert.alert(
@@ -588,6 +596,14 @@ export default function ChatThreadScreen() {
           accessibilityLabel="Open Findr album"
         >
           <Text style={styles.toolBtnText}>Album</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.toolBtn, sending && styles.sendDisabled]}
+          onPress={openCallsMenu}
+          disabled={sending}
+          accessibilityLabel="Voice or video call coming soon"
+        >
+          <Text style={styles.toolBtnText}>Call</Text>
         </Pressable>
         <TextInput
           placeholder="Message..."

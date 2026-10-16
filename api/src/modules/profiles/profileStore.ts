@@ -46,6 +46,12 @@ function rowToProfile(row: Record<string, unknown>): ProfileRecord {
     shareChatDistance: row.share_chat_distance === undefined
       ? true
       : Boolean(row.share_chat_distance),
+    freeToMeetUntil:
+      row.free_to_meet_until instanceof Date
+        ? row.free_to_meet_until.toISOString()
+        : row.free_to_meet_until
+          ? String(row.free_to_meet_until)
+          : null,
     lastActiveAt:
       row.last_active_at instanceof Date
         ? row.last_active_at.toISOString()
@@ -94,6 +100,7 @@ class MemoryProfileStore {
       isVisible: input.isVisible ?? existing?.isVisible ?? true,
       shareChatDistance:
         input.shareChatDistance ?? existing?.shareChatDistance ?? true,
+      freeToMeetUntil: existing?.freeToMeetUntil ?? null,
       lastActiveAt: stamp,
       createdAt: existing?.createdAt ?? stamp,
       updatedAt: stamp,
@@ -137,9 +144,20 @@ class MemoryProfileStore {
       lookingFor: [],
       photoUrls: [],
       isVisible: false,
+      freeToMeetUntil: null,
       lastActiveAt: null,
       updatedAt: stamp,
     });
+  }
+
+  async setFreeToMeet(userId: string, hours: number): Promise<ProfileRecord | null> {
+    const existing = this.byUserId.get(userId);
+    if (!existing) return null;
+    const until =
+      hours <= 0 ? null : new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+    const next = { ...existing, freeToMeetUntil: until, updatedAt: nowIso() };
+    this.byUserId.set(userId, next);
+    return next;
   }
 }
 
@@ -151,6 +169,7 @@ class PostgresProfileStore {
       `SELECT user_id, display_name, bio, gender_identity,
               orientations_shown, orientations_seeking, looking_for,
               photo_urls, age, is_visible, share_chat_distance,
+              free_to_meet_until,
               last_active_at, created_at, updated_at
        FROM profiles
        WHERE user_id = $1
@@ -209,6 +228,7 @@ class PostgresProfileStore {
        RETURNING user_id, display_name, bio, gender_identity,
                  orientations_shown, orientations_seeking, looking_for,
                  photo_urls, age, is_visible, share_chat_distance,
+                 free_to_meet_until,
                  last_active_at, created_at, updated_at`,
       [
         userId,
@@ -268,11 +288,30 @@ class PostgresProfileStore {
            looking_for = '{}',
            photo_urls = '{}',
            is_visible = FALSE,
+           free_to_meet_until = NULL,
            last_active_at = NULL,
            updated_at = now()
        WHERE user_id = $1`,
       [userId],
     );
+  }
+
+  async setFreeToMeet(userId: string, hours: number): Promise<ProfileRecord | null> {
+    const until =
+      hours <= 0 ? null : new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+    const result = await this.pool.query(
+      `UPDATE profiles
+       SET free_to_meet_until = $2, updated_at = now()
+       WHERE user_id = $1
+       RETURNING user_id, display_name, bio, gender_identity,
+                 orientations_shown, orientations_seeking, looking_for,
+                 photo_urls, age, is_visible, share_chat_distance,
+                 free_to_meet_until,
+                 last_active_at, created_at, updated_at`,
+      [userId, until],
+    );
+    const row = result.rows[0];
+    return row ? rowToProfile(row) : null;
   }
 }
 

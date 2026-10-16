@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
@@ -35,7 +36,12 @@ export async function registerFindrPushToken(
     });
   }
 
-  const token = await Notifications.getExpoPushTokenAsync();
+  const projectId =
+    Constants.expoConfig?.extra?.eas?.projectId ??
+    Constants.easConfig?.projectId;
+  const token = await Notifications.getExpoPushTokenAsync(
+    projectId ? { projectId: String(projectId) } : undefined,
+  );
   const expoPushToken = token.data;
   if (!expoPushToken) return;
 

@@ -17,6 +17,8 @@ export type PublicProfile = {
   age: number | null;
   isVisible: boolean;
   shareChatDistance: boolean;
+  freeToMeetActive: boolean;
+  freeToMeetUntil: string | null;
   lastActiveAt: string | null;
   updatedAt: string;
   exists: boolean;
@@ -32,6 +34,7 @@ export type NearbyCard = {
   distanceM?: number;
   online: boolean;
   isFavorite?: boolean;
+  freeToMeet?: boolean;
 };
 
 export type ProfileUpdateInput = {

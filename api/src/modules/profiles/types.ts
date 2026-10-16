@@ -28,10 +28,18 @@ export type ProfileRecord = {
   isVisible: boolean;
   /** When false, others do not see your distance in chat. */
   shareChatDistance: boolean;
+  /** ISO timestamp; active when in the future. */
+  freeToMeetUntil: string | null;
   lastActiveAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
+
+export function isFreeToMeetActive(until: string | null | undefined): boolean {
+  if (!until) return false;
+  const t = Date.parse(until);
+  return Number.isFinite(t) && t > Date.now();
+}
 
 export type ProfileUpdateInput = {
   /** Optional for partial updates (e.g. visibility-only from Safety). */
@@ -65,6 +73,8 @@ export type PublicProfile = {
   age: number | null;
   isVisible: boolean;
   shareChatDistance: boolean;
+  freeToMeetActive: boolean;
+  freeToMeetUntil: string | null;
   lastActiveAt: string | null;
   updatedAt: string;
   exists: boolean;

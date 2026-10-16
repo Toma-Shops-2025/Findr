@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 
+import { AdPlaceholderBand } from '@/components/AdPlaceholderBand';
 import { colors, spacing, typography } from '@/constants/theme';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -152,6 +153,7 @@ export default function ChatsScreen() {
         keyExtractor={(item) => item.id}
         ListHeaderComponent={listHeader}
         ListEmptyComponent={listEmpty}
+        ListFooterComponent={<AdPlaceholderBand context="Chats" />}
         contentContainerStyle={[
           styles.list,
           threads.length === 0 && styles.listGrow,

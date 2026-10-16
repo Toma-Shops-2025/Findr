@@ -8,6 +8,7 @@ import { formatDistanceBand } from '../modules/geo/coarseLocation.js';
 import { getLocationStore } from '../modules/geo/locationStore.js';
 import { sanitizeDisplayNameForPublic } from '../modules/profiles/publicDisplay.js';
 import { getProfileStore } from '../modules/profiles/profileStore.js';
+import { isFreeToMeetActive } from '../modules/profiles/types.js';
 import { getBlockStore } from '../modules/safety/blockStore.js';
 import { getFavoriteStore } from '../modules/geo/favoriteStore.js';
 import {
@@ -39,6 +40,10 @@ const nearbyQuerySchema = z.object({
     .enum(['true', 'false', '1', '0'])
     .optional()
     .transform((v) => v === 'true' || v === '1'),
+  freeToMeetOnly: z
+    .enum(['true', 'false', '1', '0'])
+    .optional()
+    .transform((v) => v === 'true' || v === '1'),
   /** Comma-separated lookingFor values (dates,friends,casual,...). */
   lookingFor: z.string().max(120).optional(),
 });
@@ -54,6 +59,7 @@ export type NearbyCard = {
   /** Approximate only - never exact pin. */
   online: boolean;
   isFavorite: boolean;
+  freeToMeet: boolean;
 };
 
 function fallbackDisplayName(email: string): string {
@@ -195,6 +201,9 @@ export const geoRoutes: FastifyPluginAsync = async (app) => {
         lastActive > 0 && Date.now() - lastActive < 15 * 60 * 1000;
       if (parsed.data.onlineOnly && !online) continue;
 
+      const freeToMeet = isFreeToMeetActive(profile?.freeToMeetUntil ?? null);
+      if (parsed.data.freeToMeetOnly && !freeToMeet) continue;
+
       const lookingFor = profile?.lookingFor ?? [];
       if (
         lookingForFilter.length > 0 &&
@@ -213,6 +222,7 @@ export const geoRoutes: FastifyPluginAsync = async (app) => {
         distanceM: Math.round(loc.distanceM),
         online,
         isFavorite: favoriteIds.has(loc.userId),
+        freeToMeet,
       });
 
       if (results.length >= parsed.data.limit) break;

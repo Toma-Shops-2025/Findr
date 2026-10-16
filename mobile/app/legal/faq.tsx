@@ -43,6 +43,11 @@ export default function FaqScreen() {
             'Nearby is meant to use approximate / fuzzed distance. Other users should not see your precise pin in the MVP design. Still be careful what you share in chat.',
         },
         {
+          heading: 'How do I share my location in chat?',
+          body:
+            'Open a chat, tap Attach, then Share approximate location. You will see a safety reminder first; only share with people you trust. The other person can tap the message for directions in maps. This is separate from the distance line under their name in the chat header.',
+        },
+        {
           heading: 'How do I control Nearby visibility?',
           body:
             'Use Visible in Nearby on Profile, or Visibility under Safety Account. Both update the same setting. When Off, you do not appear in Nearby.',

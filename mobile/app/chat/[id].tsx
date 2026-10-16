@@ -17,9 +17,18 @@ import {
 import { Stack, router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { useVideoPlayer, VideoView, type VideoView as VideoViewType } from 'expo-video';
 
 import { colors, radii, spacing, typography } from '@/constants/theme';
+import {
+  approximateChatLocation,
+  mapsDirectionsUrl,
+  OPEN_DIRECTIONS_BODY,
+  OPEN_DIRECTIONS_TITLE,
+  SHARE_LOCATION_BODY,
+  SHARE_LOCATION_TITLE,
+} from '@/lib/chatLocation';
 import {
   VIDEO_MAX_DURATION_SEC,
 } from '@/lib/mediaLimits';
@@ -328,16 +337,101 @@ export default function ChatThreadScreen() {
     );
   };
 
+  const sendLocationConfirmed = async () => {
+    if (!accessToken || !id || sending) return;
+    setSending(true);
+    setError(null);
+    try {
+      const current = await Location.getForegroundPermissionsAsync();
+      let status = current.status;
+      if (status !== 'granted') {
+        const asked = await Location.requestForegroundPermissionsAsync();
+        status = asked.status;
+      }
+      if (status !== 'granted') {
+        Alert.alert(
+          'Location permission needed',
+          'Allow Findr to read your location to share it in this chat. It is not saved to your phone gallery.',
+        );
+        return;
+      }
+
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const approx = approximateChatLocation(
+        pos.coords.latitude,
+        pos.coords.longitude,
+        typeof pos.coords.accuracy === 'number' ? pos.coords.accuracy : null,
+      );
+
+      const data = await apiFetch<{ message: PublicMessage }>(
+        `/chat/conversations/${id}/messages`,
+        {
+          method: 'POST',
+          token: accessToken,
+          body: JSON.stringify({
+            body: '',
+            location: {
+              lat: approx.lat,
+              lng: approx.lng,
+              accuracyM: approx.accuracyM,
+            },
+          }),
+        },
+      );
+      setMessages((prev) => [...prev, normalizeMessage(data.message)]);
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Location send failed');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const onShareLocation = () => {
+    if (!id || sending) return;
+    Alert.alert(SHARE_LOCATION_TITLE, SHARE_LOCATION_BODY, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Share approximate location',
+        onPress: () => {
+          void sendLocationConfirmed();
+        },
+      },
+    ]);
+  };
+
+  const openSharedLocationInMaps = (lat: number, lng: number) => {
+    Alert.alert(OPEN_DIRECTIONS_TITLE, OPEN_DIRECTIONS_BODY, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Open maps',
+        onPress: () => {
+          void Linking.openURL(mapsDirectionsUrl(lat, lng));
+        },
+      },
+    ]);
+  };
+
   const openAttachMenu = () => {
     if (!id || sending) return;
-    Alert.alert('Attach', 'Photos from gallery. Videos only via Findr camera (30s).', [
-      { text: 'Photo from gallery', onPress: () => void onPickPhoto() },
-      {
-        text: `Record video (${VIDEO_MAX_DURATION_SEC}s max)`,
-        onPress: openRecordVideo,
-      },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+    Alert.alert(
+      'Attach',
+      'Share media or your approximate location. Stays in Findr only — not your phone gallery.',
+      [
+        {
+          text: 'Share approximate location',
+          onPress: onShareLocation,
+        },
+        { text: 'Photo from gallery', onPress: () => void onPickPhoto() },
+        {
+          text: `Record video (${VIDEO_MAX_DURATION_SEC}s max)`,
+          onPress: openRecordVideo,
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
   };
 
   const openAlbum = () => {
@@ -428,17 +522,24 @@ export default function ChatThreadScreen() {
                         const lat = item.location?.lat;
                         const lng = item.location?.lng;
                         if (lat == null || lng == null) return;
-                        const url = Platform.select({
-                          ios: `maps:?q=${lat},${lng}`,
-                          default: `geo:${lat},${lng}?q=${lat},${lng}`,
-                        });
-                        void Linking.openURL(url);
+                        openSharedLocationInMaps(lat, lng);
                       }}
                     >
                       <Text
-                        style={[styles.bubbleText, item.mine && styles.mineText]}
+                        style={[
+                          styles.locationTitle,
+                          item.mine && styles.mineText,
+                        ]}
                       >
-                        Shared location — tap to open in Maps
+                        Approximate location
+                      </Text>
+                      <Text
+                        style={[
+                          styles.locationMeta,
+                          item.mine && styles.mineText,
+                        ]}
+                      >
+                        Tap for directions
                       </Text>
                     </Pressable>
                   ) : null}
@@ -476,7 +577,7 @@ export default function ChatThreadScreen() {
           style={[styles.toolBtn, sending && styles.sendDisabled]}
           onPress={openAttachMenu}
           disabled={sending}
-          accessibilityLabel="Attach photo or video"
+          accessibilityLabel="Attach photo, video, or location"
         >
           <Text style={styles.toolBtnText}>Attach</Text>
         </Pressable>
@@ -773,6 +874,17 @@ const styles = StyleSheet.create({
     color: colors.mist,
     fontSize: 15,
     lineHeight: 20,
+  },
+  locationTitle: {
+    fontFamily: typography.heading,
+    color: colors.mist,
+    fontSize: 15,
+  },
+  locationMeta: {
+    fontFamily: typography.body,
+    color: colors.mistMuted,
+    fontSize: 13,
+    marginTop: 2,
   },
   mineText: {
     color: colors.ink,

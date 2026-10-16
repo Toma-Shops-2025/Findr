@@ -875,6 +875,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20,
   },
+  locationTitle: {
+    fontFamily: typography.heading,
+    color: colors.mist,
+    fontSize: 15,
+  },
+  locationMeta: {
+    fontFamily: typography.body,
+    color: colors.mistMuted,
+    fontSize: 13,
+    marginTop: 2,
+  },
   mineText: {
     color: colors.ink,
   },

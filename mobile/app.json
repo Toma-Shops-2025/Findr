@@ -16,7 +16,7 @@
     },
     "android": {
       "package": "app.findr.mobile",
-      "versionCode": 44,
+      "versionCode": 45,
       "intentFilters": [
         {
           "action": "VIEW",

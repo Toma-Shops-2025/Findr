@@ -22,13 +22,9 @@ import { GOOGLE_ONLY_AUTH } from '@/lib/authUi';
 /**
  * Signup + 18+ age gate + legal acceptances (no DOB on MVP signup).
  * JWT session stored in SecureStore after successful signup.
- *
- * Scroll + keyboard avoidance so Create account stays reachable on short
- * screens (e.g. Galaxy S9) when the soft keyboard is open.
  */
 export default function OnboardingScreen() {
   const { signup } = useAuth();
-  const [showEmailSignup, setShowEmailSignup] = useState(!GOOGLE_ONLY_AUTH);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [accepted, setAccepted] = useState(false);
@@ -62,6 +58,8 @@ export default function OnboardingScreen() {
         setError('Findr is for adults 18+ only.');
       } else if (code === 'legal_required') {
         setError('Please accept the Terms and Privacy Policy.');
+      } else if (code === 'email_signup_disabled') {
+        setError('New signups use Google only on this server. Try Continue with Google.');
       } else setError((err as Error).message || 'Could not create account. Is the API running?');
     } finally {
       setBusy(false);
@@ -90,7 +88,7 @@ export default function OnboardingScreen() {
             <Text style={styles.support}>
               {GOOGLE_ONLY_AUTH
                 ? 'Inclusive dating for adults 18+. Sign up with Google.'
-                : 'Inclusive dating for adults 18+. Sign up with Google (recommended) or email.'}
+                : 'Inclusive dating for adults 18+. Google or email.'}
             </Text>
 
             <Pressable
@@ -125,57 +123,49 @@ export default function OnboardingScreen() {
             />
 
             {!GOOGLE_ONLY_AUTH ? (
-              <Pressable onPress={() => setShowEmailSignup((v) => !v)}>
-                <Text style={styles.linkInline}>
-                  {showEmailSignup
-                    ? 'Hide email sign-up'
-                    : 'Sign up with email instead'}
-                </Text>
-              </Pressable>
-            ) : null}
-
-            {showEmailSignup && !GOOGLE_ONLY_AUTH ? (
               <>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="you@email.com"
-              placeholderTextColor={colors.mistMuted}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              autoComplete="email"
-              style={styles.input}
-              returnKeyType="next"
-            />
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>or</Text>
+                  <View style={styles.dividerLine} />
+                </View>
 
-            <Text style={styles.label}>Password</Text>
-            <PasswordField
-              value={password}
-              onChangeText={setPassword}
-              placeholder="At least 8 characters"
-              returnKeyType="done"
-            />
+                <Text style={styles.label}>Email</Text>
+                <TextInput
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="you@email.com"
+                  placeholderTextColor={colors.mistMuted}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  autoComplete="email"
+                  style={styles.input}
+                  returnKeyType="next"
+                />
 
-            {error ? <Text style={styles.error}>{error}</Text> : null}
+                <Text style={styles.label}>Password</Text>
+                <PasswordField
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="At least 8 characters"
+                  returnKeyType="done"
+                />
 
-            <Pressable
-              style={[styles.cta, busy && styles.ctaDisabled]}
-              onPress={createAccount}
-              disabled={busy}
-            >
-              {busy ? (
-                <ActivityIndicator color={colors.ink} />
-              ) : (
-                <Text style={styles.ctaText}>Create account with email</Text>
-              )}
-            </Pressable>
+                <Pressable
+                  style={[styles.cta, busy && styles.ctaDisabled]}
+                  onPress={createAccount}
+                  disabled={busy}
+                >
+                  {busy ? (
+                    <ActivityIndicator color={colors.ink} />
+                  ) : (
+                    <Text style={styles.ctaText}>Create account with email</Text>
+                  )}
+                </Pressable>
               </>
             ) : null}
 
-            {!showEmailSignup && error ? (
-              <Text style={styles.error}>{error}</Text>
-            ) : null}
+            {error ? <Text style={styles.error}>{error}</Text> : null}
 
             <Link href="/(auth)/login" style={styles.link}>
               Already have an account? Log in
@@ -231,7 +221,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.mistMuted,
     lineHeight: 24,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginVertical: spacing.xs,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  dividerText: {
+    fontFamily: typography.body,
+    fontSize: 13,
+    color: colors.mistMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   label: {
     fontFamily: typography.bodyMedium,
@@ -286,7 +294,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   cta: {
-    marginTop: spacing.md,
+    marginTop: spacing.xs,
     backgroundColor: colors.coral,
     borderRadius: radii.md,
     paddingVertical: spacing.md,
@@ -300,15 +308,8 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 16,
   },
-  linkInline: {
-    fontFamily: typography.body,
-    fontSize: 14,
-    color: colors.teal,
-    textAlign: 'center',
-    marginVertical: spacing.sm,
-  },
   link: {
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
     marginBottom: spacing.lg,
     fontFamily: typography.bodyMedium,
     color: colors.teal,

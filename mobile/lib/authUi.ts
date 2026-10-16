@@ -1,6 +1,6 @@
 /**
- * Google-only auth in the UI (no email sign-in/sign-up).
- * Set EXPO_PUBLIC_GOOGLE_ONLY_AUTH=false to re-enable email for testing.
+ * Hide email sign-in/sign-up in the UI (Google only).
+ * Default: email + Google. Set EXPO_PUBLIC_GOOGLE_ONLY_AUTH=true to hide email.
  */
 export const GOOGLE_ONLY_AUTH =
-  process.env.EXPO_PUBLIC_GOOGLE_ONLY_AUTH !== 'false';
+  process.env.EXPO_PUBLIC_GOOGLE_ONLY_AUTH === 'true';

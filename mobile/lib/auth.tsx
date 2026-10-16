@@ -53,7 +53,8 @@ function waitForFirstPaint(): Promise<void> {
 type SignupInput = {
   email: string;
   password: string;
-  dateOfBirth: string;
+  dateOfBirth?: string;
+  acceptedAgeGate: true;
   tosAccepted: true;
   privacyAccepted: true;
 };

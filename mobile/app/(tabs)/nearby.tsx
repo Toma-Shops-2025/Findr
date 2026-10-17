@@ -382,7 +382,7 @@ export default function NearbyScreen() {
         </Pressable>
       </View>
       <Text style={styles.filterHint}>Looking for (free, inclusive)</Text>
-      <View style={styles.filterRow}>
+      <View style={styles.filterRowWrap}>
         {LOOKING_FOR_OPTIONS.map((option) => {
           const on = lookingForFilter.includes(option);
           return (
@@ -550,6 +550,16 @@ const styles = StyleSheet.create({
   },
   filterRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  filterRowWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignContent: 'flex-start',
+    width: '100%',
     gap: 8,
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.sm,

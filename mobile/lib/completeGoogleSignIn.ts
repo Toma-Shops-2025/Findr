@@ -11,10 +11,17 @@ import {
   setLastGoogleAuthError,
 } from '@/lib/googleAuthErrors';
 import { useGoogleAuthSession } from '@/lib/googleAuthContext';
+import {
+  clearPendingGoogleOAuth,
+  exchangeGoogleIdTokenFromUrl,
+  isGoogleOAuthReturnUrl,
+} from '@/lib/googleOAuthRecovery';
 import { useAuth } from '@/lib/auth';
 
 /** Prevent duplicate API calls when root handler + oauth redirect screen both mount. */
 let globalGoogleFinishInFlight = false;
+
+const OAUTH_FINISH_TIMEOUT_MS = 45_000;
 
 function idTokenFromUrl(url: string | null): string | null {
   if (!url) return null;
@@ -42,6 +49,22 @@ function tokenFromAuthUrl(
     }
   }
   return idTokenFromUrl(url);
+}
+
+async function resolveGoogleIdToken(
+  response: AuthSessionResult | null,
+  authReturnUrl: string | null,
+  request: { parseReturnUrl: (u: string) => AuthSessionResult } | null,
+): Promise<string | null> {
+  const sync =
+    idTokenFromGoogleResponse(response) ??
+    tokenFromAuthUrl(authReturnUrl, request);
+  if (sync) return sync;
+
+  if (authReturnUrl && isGoogleOAuthReturnUrl(authReturnUrl)) {
+    return exchangeGoogleIdTokenFromUrl(authReturnUrl);
+  }
+  return null;
 }
 
 /**
@@ -77,8 +100,9 @@ export function useCompleteGoogleSignIn(active = true) {
       setLastGoogleAuthError(
         'Google sign-in timed out. Try again or use email login.',
       );
+      void clearPendingGoogleOAuth();
       router.replace('/(auth)/login');
-    }, 25_000);
+    }, OAUTH_FINISH_TIMEOUT_MS);
 
     return () => clearTimeout(timeout);
   }, [active, accessToken]);
@@ -87,36 +111,50 @@ export function useCompleteGoogleSignIn(active = true) {
     if (!active || accessToken || timedOutRef.current) return;
 
     if (response?.type === 'cancel' || response?.type === 'dismiss') {
+      void clearPendingGoogleOAuth();
       router.replace('/(auth)/login');
       return;
     }
     if (response?.type === 'error') {
       setLastGoogleAuthError('Google sign-in was cancelled or failed.');
+      void clearPendingGoogleOAuth();
       router.replace('/(auth)/login');
       return;
     }
 
-    const token =
-      idTokenFromGoogleResponse(response) ??
-      tokenFromAuthUrl(authReturnUrl, request);
+    let cancelled = false;
 
-    if (!token || finishingRef.current || globalGoogleFinishInFlight) return;
+    void (async () => {
+      const token = await resolveGoogleIdToken(
+        response,
+        authReturnUrl,
+        request,
+      );
+      if (cancelled || !token || finishingRef.current || globalGoogleFinishInFlight) {
+        return;
+      }
 
-    finishingRef.current = true;
-    globalGoogleFinishInFlight = true;
-    setLastGoogleAuthError(null);
-    void loginWithGoogle(token)
-      .then(() => {
-        pendingNavRef.current = true;
-      })
-      .catch((err) => {
-        setLastGoogleAuthError(googleAuthErrorMessage(err));
-        router.replace('/(auth)/login');
-      })
-      .finally(() => {
-        finishingRef.current = false;
-        globalGoogleFinishInFlight = false;
-      });
+      finishingRef.current = true;
+      globalGoogleFinishInFlight = true;
+      setLastGoogleAuthError(null);
+      void loginWithGoogle(token)
+        .then(() => {
+          pendingNavRef.current = true;
+          void clearPendingGoogleOAuth();
+        })
+        .catch((err) => {
+          setLastGoogleAuthError(googleAuthErrorMessage(err));
+          router.replace('/(auth)/login');
+        })
+        .finally(() => {
+          finishingRef.current = false;
+          globalGoogleFinishInFlight = false;
+        });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     active,
     response,

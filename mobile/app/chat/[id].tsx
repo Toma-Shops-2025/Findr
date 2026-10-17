@@ -603,11 +603,11 @@ export default function ChatThreadScreen() {
           disabled={sending}
           accessibilityLabel="Voice or video call coming soon"
         >
-          <Text style={styles.toolBtnText}>Call</Text>
+          <Text style={styles.toolBtnTextWhite}>Call</Text>
         </Pressable>
         <TextInput
-          placeholder="Message..."
-          placeholderTextColor={colors.mistMuted}
+          placeholder="Chat"
+          placeholderTextColor={colors.mist}
           style={styles.input}
           value={draft}
           onChangeText={(text) => {
@@ -945,6 +945,11 @@ const styles = StyleSheet.create({
   toolBtnText: {
     fontFamily: typography.bodyMedium,
     color: colors.coral,
+    fontSize: 13,
+  },
+  toolBtnTextWhite: {
+    fontFamily: typography.bodyMedium,
+    color: colors.mist,
     fontSize: 13,
   },
   input: {

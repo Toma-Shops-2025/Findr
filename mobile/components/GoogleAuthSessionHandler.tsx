@@ -1,7 +1,7 @@
 import { useCompleteGoogleSignInAtRoot } from '@/lib/completeGoogleSignIn';
 
 /**
- * Finishes Google OAuth using the same auth-request instance that opened the browser.
+ * Finishes Google OAuth at app root when not on a dedicated oauth redirect screen.
  */
 export function GoogleAuthSessionHandler() {
   useCompleteGoogleSignInAtRoot();

@@ -66,15 +66,36 @@ function oauthUrlHasAuthCode(url: string | null): boolean {
   }
 }
 
+function shouldWaitForAuthSessionResponse(
+  response: AuthSessionResult | null,
+  sawBrowserOpen: boolean,
+): boolean {
+  if (response?.type === 'opened') return true;
+  if (
+    sawBrowserOpen &&
+    response?.type !== 'success' &&
+    response?.type !== 'error' &&
+    response?.type !== 'cancel' &&
+    response?.type !== 'dismiss'
+  ) {
+    return true;
+  }
+  return false;
+}
+
 async function resolveGoogleIdToken(
   response: AuthSessionResult | null,
   authReturnUrl: string | null,
   request: { parseReturnUrl: (u: string) => AuthSessionResult } | null,
+  options: { allowCodeExchange: boolean },
 ): Promise<string | null> {
-  const sync =
-    idTokenFromGoogleResponse(response) ??
-    tokenFromAuthUrl(authReturnUrl, request);
-  if (sync) return sync;
+  const fromResponse = idTokenFromGoogleResponse(response);
+  if (fromResponse) return fromResponse;
+
+  const fromUrl = tokenFromAuthUrl(authReturnUrl, request);
+  if (fromUrl) return fromUrl;
+
+  if (!options.allowCodeExchange) return null;
 
   if (authReturnUrl && isGoogleOAuthReturnUrl(authReturnUrl)) {
     if (!oauthUrlHasAuthCode(authReturnUrl)) {
@@ -100,6 +121,13 @@ export function useCompleteGoogleSignIn(active = true) {
   const finishingRef = useRef(false);
   const pendingNavRef = useRef(false);
   const timedOutRef = useRef(false);
+  const sawBrowserOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (response?.type === 'opened') {
+      sawBrowserOpenRef.current = true;
+    }
+  }, [response]);
   const linkUrl = Linking.useURL();
   const [initialUrl, setInitialUrl] = useState<string | null>(null);
   const [coldStartOAuthUrl, setColdStartOAuthUrl] = useState<string | null>(null);
@@ -158,12 +186,25 @@ export function useCompleteGoogleSignIn(active = true) {
       ) {
         return;
       }
+      if (
+        shouldWaitForAuthSessionResponse(
+          response,
+          sawBrowserOpenRef.current,
+        )
+      ) {
+        return;
+      }
+
       if (globalGoogleResolveInFlight) return;
+
+      const allowCodeExchange = !sawBrowserOpenRef.current;
 
       globalGoogleResolveInFlight = true;
       let token: string | null = null;
       try {
-        token = await resolveGoogleIdToken(response, authReturnUrl, request);
+        token = await resolveGoogleIdToken(response, authReturnUrl, request, {
+          allowCodeExchange,
+        });
       } finally {
         globalGoogleResolveInFlight = false;
       }
@@ -171,6 +212,7 @@ export function useCompleteGoogleSignIn(active = true) {
 
       if (
         !token &&
+        allowCodeExchange &&
         authReturnUrl &&
         isGoogleOAuthReturnUrl(authReturnUrl) &&
         oauthUrlHasAuthCode(authReturnUrl)

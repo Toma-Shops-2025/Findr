@@ -3,7 +3,7 @@ import { makeRedirectUri } from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { Platform } from 'react-native';
 
 import { savePendingGoogleOAuth } from '@/lib/googleOAuthRecovery';
@@ -77,6 +77,17 @@ export function useGoogleAuthRequest() {
       ? { native: googleAndroidRedirectUri(androidOAuthClientId) }
       : { scheme: 'findr', path: 'oauthredirect' },
   );
+
+  // Persist PKCE as soon as the auth request is ready so a process kill during
+  // the Google browser step still allows code exchange on cold start.
+  useEffect(() => {
+    if (!request?.codeVerifier || !clientId) return;
+    void savePendingGoogleOAuth({
+      codeVerifier: request.codeVerifier,
+      redirectUri,
+      clientId,
+    });
+  }, [clientId, redirectUri, request?.codeVerifier]);
 
   const promptAsync = useCallback(
     async (...args: Parameters<typeof promptAsyncBase>) => {

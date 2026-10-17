@@ -24,6 +24,21 @@ const GOOGLE_TOKEN_DISCOVERY = {
 
 const PENDING_MAX_AGE_MS = 10 * 60 * 1000;
 
+/** Avoid re-running a failed code exchange for the same deep link forever. */
+let abandonedOAuthReturnUrl: string | null = null;
+
+export function markGoogleOAuthReturnAbandoned(url: string): void {
+  abandonedOAuthReturnUrl = url;
+}
+
+export function clearAbandonedGoogleOAuthReturn(): void {
+  abandonedOAuthReturnUrl = null;
+}
+
+export function isAbandonedGoogleOAuthReturn(url: string): boolean {
+  return abandonedOAuthReturnUrl === url;
+}
+
 export function isGoogleOAuthReturnUrl(url: string): boolean {
   const lower = url.toLowerCase();
   return (
@@ -38,6 +53,7 @@ export async function savePendingGoogleOAuth(input: {
   redirectUri: string;
   clientId: string;
 }): Promise<void> {
+  clearAbandonedGoogleOAuthReturn();
   const payload: PendingGoogleOAuth = {
     ...input,
     savedAt: Date.now(),

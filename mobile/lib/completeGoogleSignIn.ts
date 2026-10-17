@@ -1,7 +1,7 @@
 import type { AuthSessionResult } from 'expo-auth-session';
 import { getQueryParams } from 'expo-auth-session/build/QueryParams';
 import * as Linking from 'expo-linking';
-import { router, usePathname } from 'expo-router';
+import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { InteractionManager } from 'react-native';
 
@@ -14,12 +14,16 @@ import { useGoogleAuthSession } from '@/lib/googleAuthContext';
 import {
   clearPendingGoogleOAuth,
   exchangeGoogleIdTokenFromUrl,
+  isAbandonedGoogleOAuthReturn,
   isGoogleOAuthReturnUrl,
+  markGoogleOAuthReturnAbandoned,
+  readGoogleOAuthReturnUrl,
 } from '@/lib/googleOAuthRecovery';
 import { useAuth } from '@/lib/auth';
 
 /** Prevent duplicate API calls when root handler + oauth redirect screen both mount. */
 let globalGoogleFinishInFlight = false;
+let globalGoogleResolveInFlight = false;
 
 const OAUTH_FINISH_TIMEOUT_MS = 45_000;
 
@@ -51,18 +55,58 @@ function tokenFromAuthUrl(
   return idTokenFromUrl(url);
 }
 
+function oauthUrlHasAuthCode(url: string | null): boolean {
+  if (!url) return false;
+  try {
+    const { params } = getQueryParams(url);
+    const code = params.code;
+    return typeof code === 'string' && code.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function shouldWaitForAuthSessionResponse(
+  response: AuthSessionResult | null,
+  sawBrowserOpen: boolean,
+): boolean {
+  if (response?.type === 'opened') return true;
+  if (
+    sawBrowserOpen &&
+    response?.type !== 'success' &&
+    response?.type !== 'error' &&
+    response?.type !== 'cancel' &&
+    response?.type !== 'dismiss'
+  ) {
+    return true;
+  }
+  return false;
+}
+
 async function resolveGoogleIdToken(
   response: AuthSessionResult | null,
   authReturnUrl: string | null,
   request: { parseReturnUrl: (u: string) => AuthSessionResult } | null,
+  options: { allowCodeExchange: boolean },
 ): Promise<string | null> {
-  const sync =
-    idTokenFromGoogleResponse(response) ??
-    tokenFromAuthUrl(authReturnUrl, request);
-  if (sync) return sync;
+  const fromResponse = idTokenFromGoogleResponse(response);
+  if (fromResponse) return fromResponse;
+
+  const fromUrl = tokenFromAuthUrl(authReturnUrl, request);
+  if (fromUrl) return fromUrl;
+
+  if (!options.allowCodeExchange) return null;
 
   if (authReturnUrl && isGoogleOAuthReturnUrl(authReturnUrl)) {
-    return exchangeGoogleIdTokenFromUrl(authReturnUrl);
+    if (!oauthUrlHasAuthCode(authReturnUrl)) {
+      return null;
+    }
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const token = await exchangeGoogleIdTokenFromUrl(authReturnUrl);
+      if (token) return token;
+      await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+    }
+    return null;
   }
   return null;
 }
@@ -77,17 +121,28 @@ export function useCompleteGoogleSignIn(active = true) {
   const finishingRef = useRef(false);
   const pendingNavRef = useRef(false);
   const timedOutRef = useRef(false);
+  const sawBrowserOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (response?.type === 'opened') {
+      sawBrowserOpenRef.current = true;
+    }
+  }, [response]);
   const linkUrl = Linking.useURL();
   const [initialUrl, setInitialUrl] = useState<string | null>(null);
+  const [coldStartOAuthUrl, setColdStartOAuthUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!active) return;
     void Linking.getInitialURL().then((url) => {
       if (url) setInitialUrl(url);
     });
+    void readGoogleOAuthReturnUrl().then((url) => {
+      if (url) setColdStartOAuthUrl(url);
+    });
   }, [active]);
 
-  const authReturnUrl = linkUrl ?? initialUrl;
+  const authReturnUrl = linkUrl ?? initialUrl ?? coldStartOAuthUrl;
 
   useEffect(() => {
     if (!active || accessToken) return;
@@ -125,12 +180,53 @@ export function useCompleteGoogleSignIn(active = true) {
     let cancelled = false;
 
     void (async () => {
-      const token = await resolveGoogleIdToken(
-        response,
-        authReturnUrl,
-        request,
-      );
-      if (cancelled || !token || finishingRef.current || globalGoogleFinishInFlight) {
+      if (
+        authReturnUrl &&
+        isAbandonedGoogleOAuthReturn(authReturnUrl)
+      ) {
+        return;
+      }
+      if (
+        shouldWaitForAuthSessionResponse(
+          response,
+          sawBrowserOpenRef.current,
+        )
+      ) {
+        return;
+      }
+
+      if (globalGoogleResolveInFlight) return;
+
+      const allowCodeExchange = !sawBrowserOpenRef.current;
+
+      globalGoogleResolveInFlight = true;
+      let token: string | null = null;
+      try {
+        token = await resolveGoogleIdToken(response, authReturnUrl, request, {
+          allowCodeExchange,
+        });
+      } finally {
+        globalGoogleResolveInFlight = false;
+      }
+      if (cancelled) return;
+
+      if (
+        !token &&
+        allowCodeExchange &&
+        authReturnUrl &&
+        isGoogleOAuthReturnUrl(authReturnUrl) &&
+        oauthUrlHasAuthCode(authReturnUrl)
+      ) {
+        markGoogleOAuthReturnAbandoned(authReturnUrl);
+        setLastGoogleAuthError(
+          'Google sign-in could not be completed. Try again or use email login.',
+        );
+        void clearPendingGoogleOAuth();
+        router.replace('/(auth)/login');
+        return;
+      }
+
+      if (!token || finishingRef.current || globalGoogleFinishInFlight) {
         return;
       }
 
@@ -174,10 +270,7 @@ export function useCompleteGoogleSignIn(active = true) {
   }, [active, accessToken]);
 }
 
-/** Root handler: skip when the dedicated OAuth return screen is active. */
+/** Root handler: always active so cold-start deep links still finish if routing misses oauth screens. */
 export function useCompleteGoogleSignInAtRoot() {
-  const pathname = usePathname();
-  const onDedicatedOAuthScreen =
-    pathname === '/oauth2redirect' || pathname === '/oauthredirect';
-  useCompleteGoogleSignIn(!onDedicatedOAuthScreen);
+  useCompleteGoogleSignIn(true);
 }

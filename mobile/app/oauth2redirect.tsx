@@ -2,11 +2,14 @@ import * as WebBrowser from 'expo-web-browser';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { colors, typography } from '@/constants/theme';
+import { useCompleteGoogleSignIn } from '@/lib/completeGoogleSignIn';
 
 WebBrowser.maybeCompleteAuthSession();
 
-/** Android Google OAuth return — do not route to login (drops OAuth state). */
+/** Android Google OAuth return — must complete sign-in on this route (cold start). */
 export default function GoogleOAuth2Redirect() {
+  useCompleteGoogleSignIn(true);
+
   return (
     <View style={styles.wrap}>
       <ActivityIndicator color={colors.coral} size="large" />

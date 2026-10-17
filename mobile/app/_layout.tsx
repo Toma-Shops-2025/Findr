@@ -49,6 +49,8 @@ export default function RootLayout() {
         <Stack.Screen name="chat/[id]" options={{ title: "Chat", presentation: "card" }} />
         <Stack.Screen name="album" options={{ title: "Album", presentation: "card" }} />
         <Stack.Screen name="legal" options={{ headerShown: false }} />
+        <Stack.Screen name="oauth2redirect" options={{ headerShown: false }} />
+        <Stack.Screen name="oauthredirect" options={{ headerShown: false }} />
       </Stack>
     </AuthProvider>
   );

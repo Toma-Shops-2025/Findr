@@ -269,3 +269,7 @@ export async function readPreference(key: string): Promise<string | null> {
 export async function writePreference(key: string, value: string): Promise<void> {
   await safeSet(key, value);
 }
+
+export async function deletePreference(key: string): Promise<void> {
+  await safeDelete(key);
+}

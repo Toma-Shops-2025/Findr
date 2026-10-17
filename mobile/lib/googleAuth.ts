@@ -3,7 +3,10 @@ import { makeRedirectUri } from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
+import { useCallback } from 'react';
 import { Platform } from 'react-native';
+
+import { savePendingGoogleOAuth } from '@/lib/googleOAuthRecovery';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -27,7 +30,7 @@ export function googleAndroidRedirectUri(androidClientId: string): string {
   return `com.googleusercontent.apps.${prefix}:/oauth2redirect`;
 }
 
-export function useGoogleAuthRequest() {
+export function getGoogleOAuthClientConfig() {
   const webClientId = readClientId(
     'EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID',
     'googleWebClientId',
@@ -42,7 +45,24 @@ export function useGoogleAuthRequest() {
       ? googleAndroidRedirectUri(androidOAuthClientId)
       : makeRedirectUri({ scheme: 'findr', path: 'oauthredirect' });
 
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest(
+  const clientId =
+    Platform.OS === 'android'
+      ? androidOAuthClientId ?? webClientId ?? ''
+      : webClientId ?? '';
+
+  return {
+    webClientId,
+    androidOAuthClientId,
+    redirectUri,
+    clientId,
+  };
+}
+
+export function useGoogleAuthRequest() {
+  const { webClientId, androidOAuthClientId, redirectUri, clientId } =
+    getGoogleOAuthClientConfig();
+
+  const [request, response, promptAsyncBase] = Google.useIdTokenAuthRequest(
     {
       webClientId,
       androidClientId:
@@ -56,6 +76,20 @@ export function useGoogleAuthRequest() {
     Platform.OS === 'android' && androidOAuthClientId
       ? { native: googleAndroidRedirectUri(androidOAuthClientId) }
       : { scheme: 'findr', path: 'oauthredirect' },
+  );
+
+  const promptAsync = useCallback(
+    async (...args: Parameters<typeof promptAsyncBase>) => {
+      if (request?.codeVerifier && clientId) {
+        await savePendingGoogleOAuth({
+          codeVerifier: request.codeVerifier,
+          redirectUri,
+          clientId,
+        });
+      }
+      return promptAsyncBase(...args);
+    },
+    [clientId, promptAsyncBase, redirectUri, request?.codeVerifier],
   );
 
   const configured =

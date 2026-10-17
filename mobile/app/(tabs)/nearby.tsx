@@ -27,7 +27,8 @@ import {
   readCachedCoords,
   writeCachedCoords,
 } from '@/lib/nearbyCoordsCache';
-import type { NearbyCard } from '@/lib/types';
+import { AdPlaceholderBand } from '@/components/AdPlaceholderBand';
+import { LOOKING_FOR_OPTIONS, type LookingFor, type NearbyCard } from '@/lib/types';
 
 type NearbyResponse = {
   results: NearbyCard[];
@@ -123,6 +124,7 @@ const NearbyCardCell = memo(function NearbyCardCell({
         {item.displayName}
       </Text>
       <Text style={styles.meta} numberOfLines={1}>
+        {item.freeToMeet ? 'Free to meet · ' : ''}
         {item.age != null ? item.age + ' | ' : ''}
         {item.distanceLabel}
       </Text>
@@ -157,6 +159,8 @@ export default function NearbyScreen() {
   const [modeNote, setModeNote] = useState<string | null>(null);
   const [onlineOnly, setOnlineOnly] = useState(false);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [freeToMeetOnly, setFreeToMeetOnly] = useState(false);
+  const [lookingForFilter, setLookingForFilter] = useState<LookingFor[]>([]);
 
   const lastFetchedAtRef = useRef(0);
   const hasGridDataRef = useRef(false);
@@ -229,6 +233,10 @@ export default function NearbyScreen() {
         });
         if (onlineOnly) qs.set('onlineOnly', 'true');
         if (favoritesOnly) qs.set('favoritesOnly', 'true');
+        if (freeToMeetOnly) qs.set('freeToMeetOnly', 'true');
+        if (lookingForFilter.length > 0) {
+          qs.set('lookingFor', lookingForFilter.join(','));
+        }
         qs.set('latitude', String(fuzzed.latitude));
         qs.set('longitude', String(fuzzed.longitude));
 
@@ -286,7 +294,7 @@ export default function NearbyScreen() {
       });
       return loadInFlightRef.current;
     },
-    [accessToken, favoritesOnly, onlineOnly],
+    [accessToken, favoritesOnly, freeToMeetOnly, lookingForFilter, onlineOnly],
   );
 
   loadNearbyRef.current = loadNearby;
@@ -330,7 +338,7 @@ export default function NearbyScreen() {
       return;
     }
     void loadNearby('refresh');
-  }, [onlineOnly, favoritesOnly, accessToken, loadNearby]);
+  }, [onlineOnly, favoritesOnly, freeToMeetOnly, lookingForFilter, accessToken, loadNearby]);
 
   const gridRows = useMemo(() => buildNearbyGridRows(items), [items]);
 
@@ -362,6 +370,37 @@ export default function NearbyScreen() {
             Favorites
           </Text>
         </Pressable>
+        <Pressable
+          style={[styles.filterChip, freeToMeetOnly && styles.filterChipOn]}
+          onPress={() => setFreeToMeetOnly((v) => !v)}
+        >
+          <Text
+            style={[styles.filterText, freeToMeetOnly && styles.filterTextOn]}
+          >
+            Free to meet
+          </Text>
+        </Pressable>
+      </View>
+      <Text style={styles.filterHint}>Looking for (free, inclusive)</Text>
+      <View style={styles.filterRow}>
+        {LOOKING_FOR_OPTIONS.map((option) => {
+          const on = lookingForFilter.includes(option);
+          return (
+            <Pressable
+              key={option}
+              style={[styles.filterChip, on && styles.filterChipOn]}
+              onPress={() =>
+                setLookingForFilter((prev) =>
+                  on ? prev.filter((v) => v !== option) : [...prev, option],
+                )
+              }
+            >
+              <Text style={[styles.filterText, on && styles.filterTextOn]}>
+                {option}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
       {modeNote ? <Text style={styles.note}>{modeNote}</Text> : null}
       {error ? (
@@ -377,7 +416,7 @@ export default function NearbyScreen() {
       ) : null}
     </>
     ),
-    [onlineOnly, favoritesOnly, modeNote, error],
+    [onlineOnly, favoritesOnly, freeToMeetOnly, lookingForFilter, modeNote, error],
   );
 
   const listEmpty = useMemo(
@@ -418,6 +457,7 @@ export default function NearbyScreen() {
         keyExtractor={(row, index) => gridRowKey(row, index)}
         ListHeaderComponent={listHeader}
         ListEmptyComponent={listEmpty}
+        ListFooterComponent={<AdPlaceholderBand context="Nearby" />}
         contentContainerStyle={[
           styles.list,
           gridRows.length === 0 && styles.listGrow,
@@ -524,6 +564,12 @@ const styles = StyleSheet.create({
   filterChipOn: {
     borderColor: colors.coral,
     backgroundColor: 'rgba(255,107,74,0.15)',
+  },
+  filterHint: {
+    fontFamily: typography.body,
+    fontSize: 12,
+    color: colors.mistMuted,
+    marginTop: spacing.xs,
   },
   filterText: {
     color: colors.mistMuted,

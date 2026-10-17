@@ -10,6 +10,7 @@ export type DemoNearbyCard = {
   distanceM: number;
   online: boolean;
   isFavorite: boolean;
+  freeToMeet: boolean;
 };
 
 /** Synthetic Nearby cards for empty maps / Play screenshots (not real accounts). */
@@ -93,6 +94,7 @@ export function demoNearbyCards(_excludeUserId: string): DemoNearbyCard[] {
     distanceM: p.distanceM,
     online: true,
     isFavorite: false,
+    freeToMeet: false,
   }));
 }
 

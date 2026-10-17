@@ -10,7 +10,12 @@ import {
   sanitizeDisplayNameForPublic,
 } from '../modules/profiles/publicDisplay.js';
 import { getProfileStore } from '../modules/profiles/profileStore.js';
-import type { LookingFor, ProfileRecord, PublicProfile } from '../modules/profiles/types.js';
+import {
+  isFreeToMeetActive,
+  type LookingFor,
+  type ProfileRecord,
+  type PublicProfile,
+} from '../modules/profiles/types.js';
 import { getBlockStore } from '../modules/safety/blockStore.js';
 import {
   getDemoPersona,
@@ -94,11 +99,14 @@ function toPublicProfile(
       age,
       isVisible: true,
       shareChatDistance: true,
+      freeToMeetActive: false,
+      freeToMeetUntil: null,
       lastActiveAt: null,
       updatedAt: new Date().toISOString(),
       exists: false,
     };
   }
+  const freeToMeetUntil = record.freeToMeetUntil ?? null;
   return {
     userId: record.userId,
     displayName: sanitizeDisplayNameForPublic(record.displayName),
@@ -111,6 +119,8 @@ function toPublicProfile(
     age,
     isVisible: record.isVisible,
     shareChatDistance: record.shareChatDistance,
+    freeToMeetUntil,
+    freeToMeetActive: isFreeToMeetActive(freeToMeetUntil),
     lastActiveAt: record.lastActiveAt,
     updatedAt: record.updatedAt,
     exists: true,
@@ -220,6 +230,30 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     }
     const record = await store.upsert(auth.userId, update);
 
+    return {
+      profile: toPublicProfile(record, auth.userId, auth.user.dateOfBirth),
+    };
+  });
+
+  /** Time-boxed "free to meet" intent (default 3 hours). Pass hours: 0 to clear. */
+  app.post('/me/free-to-meet', async (req, reply) => {
+    const auth = await requireAuth(req, reply);
+    if (!auth) return;
+
+    const body = z
+      .object({
+        hours: z.union([z.literal(0), z.literal(3)]).default(3),
+      })
+      .safeParse(req.body ?? {});
+    if (!body.success) {
+      return reply.code(400).send({ error: 'invalid_body' });
+    }
+
+    const store = await getProfileStore();
+    const record = await store.setFreeToMeet(auth.userId, body.data.hours);
+    if (!record) {
+      return reply.code(404).send({ error: 'profile_not_found' });
+    }
     return {
       profile: toPublicProfile(record, auth.userId, auth.user.dateOfBirth),
     };

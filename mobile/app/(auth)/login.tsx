@@ -115,9 +115,10 @@ export default function LoginScreen() {
                     setError(null);
                     try {
                       await requestPasswordReset(email.trim());
-                      setResetSent(true);
-                    } catch {
-                      setError('Could not send reset email. Try again later.');
+                  setResetSent(true);
+                  setError(null);
+                } catch {
+                  setError('Could not send reset email. Try again later.');
                     } finally {
                       setResetBusy(false);
                     }
@@ -125,7 +126,9 @@ export default function LoginScreen() {
                   disabled={resetBusy}
                 >
                   <Text style={styles.forgot}>
-                    {resetSent ? 'Reset email sent (check inbox)' : 'Forgot password?'}
+                    {resetSent
+                  ? 'Reset email sent (check inbox and spam)'
+                  : 'Forgot password?'}
                   </Text>
                 </Pressable>
                 <Pressable

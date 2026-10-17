@@ -14,6 +14,7 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AdPlaceholderBand } from '@/components/AdPlaceholderBand';
 import { CommunityGuidelinesBanner } from '@/components/CommunityGuidelinesBanner';
 import { colors, radii, spacing, typography } from '@/constants/theme';
 import { apiFetch } from '@/lib/api';
@@ -41,6 +42,24 @@ export default function SettingsScreen() {
   const [visibilityLoading, setVisibilityLoading] = useState(true);
   const [visibilitySaving, setVisibilitySaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [safetyNotices, setSafetyNotices] = useState<
+    { id: string; message: string }[]
+  >([]);
+
+  const loadSafetyNotices = useCallback(async () => {
+    if (!accessToken) {
+      setSafetyNotices([]);
+      return;
+    }
+    try {
+      const data = await apiFetch<{
+        notices: { id: string; message: string }[];
+      }>('/safety/notices', { token: accessToken });
+      setSafetyNotices(data.notices ?? []);
+    } catch {
+      setSafetyNotices([]);
+    }
+  }, [accessToken]);
 
   const loadVisibility = useCallback(async () => {
     if (!accessToken) {
@@ -92,7 +111,8 @@ export default function SettingsScreen() {
     useCallback(() => {
       loadBlocks();
       loadVisibility();
-    }, [loadBlocks, loadVisibility]),
+      void loadSafetyNotices();
+    }, [loadBlocks, loadVisibility, loadSafetyNotices]),
   );
 
   const onToggleVisibility = (next: boolean) => {
@@ -208,6 +228,33 @@ export default function SettingsScreen() {
       }
     >
       <CommunityGuidelinesBanner />
+
+      {safetyNotices.length > 0 ? (
+        <View style={styles.noticeBox}>
+          <Text style={styles.noticeTitle}>Report update</Text>
+          {safetyNotices.map((n) => (
+            <Text key={n.id} style={styles.noticeBody}>{n.message}</Text>
+          ))}
+          <Pressable
+            onPress={() => {
+              if (!accessToken) return;
+              void (async () => {
+                try {
+                  await apiFetch('/safety/notices/read', {
+                    method: 'POST',
+                    token: accessToken,
+                  });
+                  setSafetyNotices([]);
+                } catch {
+                  setSafetyNotices([]);
+                }
+              })();
+            }}
+          >
+            <Text style={styles.noticeDismiss}>Dismiss</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       <Text style={styles.lead}>
         Visibility, account, and safety tools.
@@ -327,6 +374,7 @@ export default function SettingsScreen() {
           ends on this device until you sign in again.
         </Text>
       </View>
+      <AdPlaceholderBand context="Safety" />
     </ScrollView>
   );
 }
@@ -441,6 +489,32 @@ const styles = StyleSheet.create({
   },
   signOutNote: {
     marginTop: spacing.md,
+  },
+  noticeBox: {
+    backgroundColor: colors.inkElevated,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.teal,
+    padding: spacing.md,
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  noticeTitle: {
+    fontFamily: typography.heading,
+    color: colors.teal,
+    fontSize: 14,
+  },
+  noticeBody: {
+    fontFamily: typography.body,
+    color: colors.mist,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  noticeDismiss: {
+    fontFamily: typography.bodyMedium,
+    color: colors.coral,
+    fontSize: 13,
+    marginTop: spacing.xs,
   },
   rowTitle: {
     fontFamily: typography.heading,

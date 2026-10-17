@@ -163,15 +163,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const persistSession = useCallback(async (data: AuthSession) => {
+    await clearSession();
+    await saveSession(data, { persist: false });
+    setSession(data);
+    try {
+      const { registerFindrPushToken } = await import('@/lib/push');
+      await registerFindrPushToken(data.accessToken);
+    } catch (err) {
+      console.warn('Findr push registration skipped', err);
+    }
+  }, []);
+
   const signup = useCallback(async (input: SignupInput) => {
     const data = await apiFetchLazy<AuthSession>('/auth/signup', {
       method: 'POST',
       body: JSON.stringify(input),
     });
-    await clearSession();
-    await saveSession(data, { persist: false });
-    setSession(data);
-  }, []);
+    await persistSession(data);
+  }, [persistSession]);
 
   const login = useCallback(async (input: LoginInput) => {
     const { email, password } = input;
@@ -179,10 +189,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-    await clearSession();
-    await saveSession(data, { persist: false });
-    setSession(data);
-  }, []);
+    await persistSession(data);
+  }, [persistSession]);
 
   const loginWithGoogle = useCallback(async (idToken: string) => {
     const data = await apiFetchLazy<AuthSession>('/auth/google', {
@@ -194,10 +202,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         privacyAccepted: true,
       }),
     });
-    await clearSession();
-    await saveSession(data, { persist: false });
-    setSession(data);
-  }, []);
+    await persistSession(data);
+  }, [persistSession]);
 
   const requestPasswordReset = useCallback(async (email: string) => {
     await apiFetchLazy('/auth/forgot-password', {

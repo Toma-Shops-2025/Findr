@@ -12,6 +12,7 @@ import {
   parseReportReason,
 } from '../modules/safety/reportStore.js';
 import { applyReportSideEffects } from '../modules/safety/reportSideEffects.js';
+import { getSafetyNoticeStore } from '../modules/safety/safetyNoticeStore.js';
 
 const blockSchema = z.object({
   userId: z.string().uuid().or(z.string().min(1).max(80)),
@@ -204,5 +205,23 @@ export const safetyRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return reply.code(201).send({ ok: true, status: 'received', reportId: created.id });
+  });
+
+  app.get('/notices', async (req, reply) => {
+    const auth = await requireAuth(req, reply);
+    if (!auth) return;
+
+    const store = await getSafetyNoticeStore();
+    const notices = await store.listUnread(auth.userId);
+    return { notices };
+  });
+
+  app.post('/notices/read', async (req, reply) => {
+    const auth = await requireAuth(req, reply);
+    if (!auth) return;
+
+    const store = await getSafetyNoticeStore();
+    await store.markAllRead(auth.userId);
+    return { ok: true };
   });
 };

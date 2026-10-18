@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, StyleSheet, Text } from 'react-native';
 
 import { colors, radii, spacing, typography } from '@/constants/theme';
+import { GOOGLE_AUTH_DISABLED } from '@/lib/authUi';
 import { useGoogleAuthSession } from '@/lib/googleAuthContext';
 
 type Props = {
@@ -43,7 +44,7 @@ export function GoogleSignInButton({
     return () => sub.remove();
   }, []);
 
-  if (!configured) {
+  if (GOOGLE_AUTH_DISABLED || !configured) {
     return null;
   }
 

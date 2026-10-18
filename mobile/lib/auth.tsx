@@ -164,15 +164,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const persistSession = useCallback(async (data: AuthSession) => {
-    await clearSession();
-    await saveSession(data, { persist: false });
+    // Paint logged-in UI immediately; storage + push must not block OAuth finish.
     setSession(data);
     try {
-      const { registerFindrPushToken } = await import('@/lib/push');
-      await registerFindrPushToken(data.accessToken);
+      await clearSession();
+      await saveSession(data, { persist: false });
     } catch (err) {
-      console.warn('Findr push registration skipped', err);
+      console.warn('Findr session persist failed', err);
     }
+    void import('@/lib/push')
+      .then(({ registerFindrPushToken }) => registerFindrPushToken(data.accessToken))
+      .catch((err) => {
+        console.warn('Findr push registration skipped', err);
+      });
   }, []);
 
   const signup = useCallback(async (input: SignupInput) => {

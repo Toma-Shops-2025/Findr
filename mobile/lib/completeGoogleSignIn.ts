@@ -108,6 +108,9 @@ export function useCompleteGoogleSignIn(active = true) {
   const finishingRef = useRef(false);
   const pendingNavRef = useRef(false);
   const timedOutRef = useRef(false);
+  const oauthSucceededRef = useRef(false);
+  const accessTokenRef = useRef(accessToken);
+  accessTokenRef.current = accessToken;
   const routeParams = useGlobalSearchParams();
   const routerOAuthUrl = useMemo(
     () => googleOAuthReturnUrlFromRouteParams(routeParams as Record<string, unknown>),
@@ -143,7 +146,10 @@ export function useCompleteGoogleSignIn(active = true) {
     if (!enabled || accessToken) return;
 
     const timeout = setTimeout(() => {
-      if (accessToken) return;
+      if (oauthSucceededRef.current || accessTokenRef.current) {
+        router.replace('/(tabs)/nearby');
+        return;
+      }
       timedOutRef.current = true;
       setLastGoogleAuthError(
         'Google sign-in timed out. Try again or use email login.',
@@ -214,7 +220,9 @@ export function useCompleteGoogleSignIn(active = true) {
       setLastGoogleAuthError(null);
       void loginWithGoogle(token)
         .then(() => {
+          oauthSucceededRef.current = true;
           pendingNavRef.current = true;
+          setLastGoogleAuthError(null);
           void clearPendingGoogleOAuth();
           router.replace('/(tabs)/nearby');
         })

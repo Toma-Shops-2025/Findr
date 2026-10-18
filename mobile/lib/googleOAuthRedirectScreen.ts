@@ -26,7 +26,8 @@ import {
   tryBeginOAuthResolve,
 } from '@/lib/googleOAuthFinishLocks';
 
-const REDIRECT_FINISH_MS = 25_000;
+/** Only for code exchange + cold Render wake — API login is usually <1s. */
+const REDIRECT_FINISH_MS = 45_000;
 
 function paramCode(params: Record<string, unknown>): string | null {
   const raw = params.code;
@@ -35,7 +36,12 @@ function paramCode(params: Record<string, unknown>): string | null {
 }
 
 function goToNearby(): void {
+  setLastGoogleAuthError(null);
   router.replace('/(tabs)/nearby');
+}
+
+function isLoggedIn(accessTokenRef: React.RefObject<string | null>): boolean {
+  return Boolean(accessTokenRef.current);
 }
 
 /**
@@ -47,9 +53,34 @@ export function useGoogleOAuthRedirectScreen() {
   const { response } = useGoogleAuthSession();
   const params = useGlobalSearchParams();
   const pathname = usePathname();
-  const finishStartedRef = useRef(false);
+  const accessTokenRef = useRef(accessToken);
+  accessTokenRef.current = accessToken;
   const succeededRef = useRef(false);
+  const bailRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [statusLine, setStatusLine] = useState('Finishing Google sign-in…');
+
+  const clearBail = () => {
+    if (bailRef.current) {
+      clearTimeout(bailRef.current);
+      bailRef.current = null;
+    }
+  };
+
+  const armBail = () => {
+    if (bailRef.current || succeededRef.current) return;
+    bailRef.current = setTimeout(() => {
+      bailRef.current = null;
+      if (succeededRef.current || isLoggedIn(accessTokenRef)) {
+        goToNearby();
+        return;
+      }
+      setLastGoogleAuthError(
+        'Google sign-in timed out. Try again or use email login.',
+      );
+      void clearPendingGoogleOAuth();
+      router.replace('/(auth)/login');
+    }, REDIRECT_FINISH_MS);
+  };
 
   useEffect(() => {
     if (GOOGLE_AUTH_DISABLED) {
@@ -58,35 +89,22 @@ export function useGoogleOAuthRedirectScreen() {
   }, []);
 
   useEffect(() => {
-    if (accessToken) {
-      succeededRef.current = true;
-      goToNearby();
-    }
+    if (!accessToken) return;
+    succeededRef.current = true;
+    clearBail();
+    goToNearby();
   }, [accessToken]);
 
   useEffect(() => {
-    if (GOOGLE_AUTH_DISABLED || accessToken || succeededRef.current) return;
+    if (GOOGLE_AUTH_DISABLED || succeededRef.current || accessToken) return;
 
-    const bail = setTimeout(() => {
-      if (succeededRef.current) return;
-      setLastGoogleAuthError(
-        'Google sign-in timed out. Try again or use email login.',
-      );
-      void clearPendingGoogleOAuth();
-      router.replace('/(auth)/login');
-    }, REDIRECT_FINISH_MS);
+    armBail();
 
-    if (finishStartedRef.current) {
-      return () => clearTimeout(bail);
-    }
-    finishStartedRef.current = true;
+    if (!tryBeginOAuthResolve()) return;
+
+    let cancelled = false;
 
     void (async () => {
-      if (!tryBeginOAuthResolve()) {
-        finishStartedRef.current = false;
-        return;
-      }
-
       setStatusLine('Finishing Google sign-in…');
 
       let token = idTokenFromGoogleResponse(response);
@@ -110,8 +128,15 @@ export function useGoogleOAuthRedirectScreen() {
 
       endOAuthResolve();
 
+      if (cancelled) return;
+
       if (!token) {
-        finishStartedRef.current = false;
+        if (isLoggedIn(accessTokenRef)) {
+          succeededRef.current = true;
+          clearBail();
+          goToNearby();
+          return;
+        }
         const pending = await loadPendingGoogleOAuth();
         setLastGoogleAuthError(
           pending
@@ -119,32 +144,42 @@ export function useGoogleOAuthRedirectScreen() {
             : 'Google sign-in session was lost after Google. Close the app fully and try again.',
         );
         void clearPendingGoogleOAuth();
+        clearBail();
         router.replace('/(auth)/login');
         return;
       }
 
-      if (!tryBeginOAuthLogin()) {
-        finishStartedRef.current = false;
-        return;
-      }
+      if (!tryBeginOAuthLogin()) return;
 
       setStatusLine('Signing you in…');
       try {
         await loginWithGoogle(token);
         succeededRef.current = true;
+        clearBail();
         void clearPendingGoogleOAuth();
         goToNearby();
       } catch (err) {
-        finishStartedRef.current = false;
+        if (isLoggedIn(accessTokenRef)) {
+          succeededRef.current = true;
+          clearBail();
+          goToNearby();
+          return;
+        }
         setLastGoogleAuthError(googleAuthErrorMessage(err));
+        clearBail();
         router.replace('/(auth)/login');
       } finally {
         endOAuthLogin();
       }
     })();
 
-    return () => clearTimeout(bail);
+    return () => {
+      cancelled = true;
+      endOAuthResolve();
+    };
   }, [loginWithGoogle, params, pathname, response, accessToken]);
+
+  useEffect(() => () => clearBail(), []);
 
   return statusLine;
 }

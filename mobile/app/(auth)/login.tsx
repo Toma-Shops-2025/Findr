@@ -22,7 +22,7 @@ import { GOOGLE_ONLY_AUTH } from '@/lib/authUi';
 import { consumeLastGoogleAuthError } from '@/lib/googleAuthErrors';
 
 export default function LoginScreen() {
-  const { login, requestPasswordReset } = useAuth();
+  const { login, requestPasswordReset, accessToken } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showEmailLogin, setShowEmailLogin] = useState(!GOOGLE_ONLY_AUTH);
@@ -33,9 +33,13 @@ export default function LoginScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (accessToken) {
+        router.replace('/(tabs)/nearby');
+        return;
+      }
       const googleErr = consumeLastGoogleAuthError();
       if (googleErr) setError(googleErr);
-    }, []),
+    }, [accessToken]),
   );
 
   const onLogin = async () => {

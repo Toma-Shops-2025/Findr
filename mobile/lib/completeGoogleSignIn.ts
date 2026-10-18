@@ -25,10 +25,10 @@ import {
 import { useAuth } from '@/lib/auth';
 import { GOOGLE_AUTH_DISABLED } from '@/lib/authUi';
 import {
+  acquireOAuthLogin,
+  acquireOAuthResolve,
   endOAuthLogin,
   endOAuthResolve,
-  tryBeginOAuthLogin,
-  tryBeginOAuthResolve,
 } from '@/lib/googleOAuthFinishLocks';
 
 const OAUTH_FINISH_TIMEOUT_MS = 25_000;
@@ -190,7 +190,7 @@ export function useCompleteGoogleSignIn(active = true) {
         return;
       }
 
-      if (!tryBeginOAuthResolve()) return;
+      if (!(await acquireOAuthResolve())) return;
 
       let token: string | null = null;
       try {
@@ -214,7 +214,7 @@ export function useCompleteGoogleSignIn(active = true) {
       }
 
       if (!token || finishingRef.current) return;
-      if (!tryBeginOAuthLogin()) return;
+      if (!(await acquireOAuthLogin())) return;
 
       finishingRef.current = true;
       setLastGoogleAuthError(null);
@@ -238,6 +238,7 @@ export function useCompleteGoogleSignIn(active = true) {
 
     return () => {
       cancelled = true;
+      endOAuthResolve();
     };
   }, [
     enabled,
@@ -258,10 +259,12 @@ export function useCompleteGoogleSignIn(active = true) {
   }, [enabled, accessToken]);
 }
 
-/** Root handler: skip dedicated redirect routes (they use useGoogleOAuthRedirectScreen). */
+/** Root handler: only for in-app returns — not login/onboarding or oauth redirect screens. */
 export function useCompleteGoogleSignInAtRoot() {
   const pathname = usePathname();
-  const onRedirect =
+  const onDedicatedOAuth =
     pathname === '/oauth2redirect' || pathname === '/oauthredirect';
-  useCompleteGoogleSignIn(!onRedirect);
+  const onAuthEntry =
+    pathname.includes('login') || pathname.includes('onboarding');
+  useCompleteGoogleSignIn(!onDedicatedOAuth && !onAuthEntry);
 }

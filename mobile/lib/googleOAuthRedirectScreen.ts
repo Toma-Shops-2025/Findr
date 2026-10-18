@@ -9,8 +9,8 @@ import {
 } from '@/lib/googleAuthErrors';
 import { useGoogleAuthSession } from '@/lib/googleAuthContext';
 import { useAuth } from '@/lib/auth';
+import { GOOGLE_AUTH_DISABLED } from '@/lib/authUi';
 import {
-  clearAbandonedGoogleOAuthReturn,
   clearPendingGoogleOAuth,
   exchangeGoogleIdTokenFromAuthCode,
   exchangeGoogleIdTokenFromUrl,
@@ -19,9 +19,14 @@ import {
   loadPendingGoogleOAuth,
   readGoogleOAuthReturnUrl,
 } from '@/lib/googleOAuthRecovery';
-import { resetGoogleOAuthFinishLocks } from '@/lib/googleOAuthFinishLocks';
+import {
+  endOAuthLogin,
+  endOAuthResolve,
+  tryBeginOAuthLogin,
+  tryBeginOAuthResolve,
+} from '@/lib/googleOAuthFinishLocks';
 
-const REDIRECT_FINISH_MS = 20_000;
+const REDIRECT_FINISH_MS = 25_000;
 
 function paramCode(params: Record<string, unknown>): string | null {
   const raw = params.code;
@@ -29,30 +34,41 @@ function paramCode(params: Record<string, unknown>): string | null {
   return typeof raw === 'string' && raw.length > 0 ? raw : null;
 }
 
+function goToNearby(): void {
+  router.replace('/(tabs)/nearby');
+}
+
 /**
- * Dedicated finisher for /oauth2redirect and /oauthredirect — no shared
- * "abandoned URL" dead-ends, guaranteed timeout back to login.
+ * Dedicated finisher for /oauth2redirect and /oauthredirect — single-flight,
+ * shared locks with root handler, declarative Redirect when session is set.
  */
 export function useGoogleOAuthRedirectScreen() {
   const { loginWithGoogle, accessToken } = useAuth();
   const { response } = useGoogleAuthSession();
   const params = useGlobalSearchParams();
   const pathname = usePathname();
-  const runRef = useRef(false);
+  const finishStartedRef = useRef(false);
+  const succeededRef = useRef(false);
   const [statusLine, setStatusLine] = useState('Finishing Google sign-in…');
 
   useEffect(() => {
-    resetGoogleOAuthFinishLocks();
-    clearAbandonedGoogleOAuthReturn();
+    if (GOOGLE_AUTH_DISABLED) {
+      router.replace('/(auth)/login');
+    }
   }, []);
 
   useEffect(() => {
     if (accessToken) {
-      router.replace('/(tabs)/nearby');
-      return;
+      succeededRef.current = true;
+      goToNearby();
     }
+  }, [accessToken]);
+
+  useEffect(() => {
+    if (GOOGLE_AUTH_DISABLED || accessToken || succeededRef.current) return;
 
     const bail = setTimeout(() => {
+      if (succeededRef.current) return;
       setLastGoogleAuthError(
         'Google sign-in timed out. Try again or use email login.',
       );
@@ -60,12 +76,17 @@ export function useGoogleOAuthRedirectScreen() {
       router.replace('/(auth)/login');
     }, REDIRECT_FINISH_MS);
 
-    if (runRef.current) {
+    if (finishStartedRef.current) {
       return () => clearTimeout(bail);
     }
-    runRef.current = true;
+    finishStartedRef.current = true;
 
     void (async () => {
+      if (!tryBeginOAuthResolve()) {
+        finishStartedRef.current = false;
+        return;
+      }
+
       setStatusLine('Finishing Google sign-in…');
 
       let token = idTokenFromGoogleResponse(response);
@@ -87,7 +108,10 @@ export function useGoogleOAuthRedirectScreen() {
         token = await exchangeGoogleIdTokenFromUrl(returnUrl);
       }
 
+      endOAuthResolve();
+
       if (!token) {
+        finishStartedRef.current = false;
         const pending = await loadPendingGoogleOAuth();
         setLastGoogleAuthError(
           pending
@@ -99,21 +123,28 @@ export function useGoogleOAuthRedirectScreen() {
         return;
       }
 
+      if (!tryBeginOAuthLogin()) {
+        finishStartedRef.current = false;
+        return;
+      }
+
       setStatusLine('Signing you in…');
       try {
         await loginWithGoogle(token);
-        router.replace('/(tabs)/nearby');
+        succeededRef.current = true;
+        void clearPendingGoogleOAuth();
+        goToNearby();
       } catch (err) {
+        finishStartedRef.current = false;
         setLastGoogleAuthError(googleAuthErrorMessage(err));
         router.replace('/(auth)/login');
+      } finally {
+        endOAuthLogin();
       }
     })();
 
-    return () => {
-      clearTimeout(bail);
-      runRef.current = false;
-    };
-  }, [accessToken, loginWithGoogle, params, pathname, response]);
+    return () => clearTimeout(bail);
+  }, [loginWithGoogle, params, pathname, response, accessToken]);
 
   return statusLine;
 }

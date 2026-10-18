@@ -23,6 +23,7 @@ import {
   readGoogleOAuthReturnUrl,
 } from '@/lib/googleOAuthRecovery';
 import { useAuth } from '@/lib/auth';
+import { GOOGLE_AUTH_DISABLED } from '@/lib/authUi';
 import {
   endOAuthLogin,
   endOAuthResolve,
@@ -102,6 +103,7 @@ async function resolveGoogleIdToken(
  */
 export function useCompleteGoogleSignIn(active = true) {
   const { loginWithGoogle, accessToken } = useAuth();
+  const enabled = active && !GOOGLE_AUTH_DISABLED;
   const { response, request } = useGoogleAuthSession();
   const finishingRef = useRef(false);
   const pendingNavRef = useRef(false);
@@ -116,7 +118,7 @@ export function useCompleteGoogleSignIn(active = true) {
   const [coldStartOAuthUrl, setColdStartOAuthUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!active) return;
+    if (!enabled) return;
     void Linking.getInitialURL().then((url) => {
       if (url) setInitialUrl(url);
     });
@@ -132,13 +134,13 @@ export function useCompleteGoogleSignIn(active = true) {
       }
     });
     return () => sub.remove();
-  }, [active]);
+  }, [enabled]);
 
   const authReturnUrl =
     linkUrl ?? routerOAuthUrl ?? initialUrl ?? coldStartOAuthUrl;
 
   useEffect(() => {
-    if (!active || accessToken) return;
+    if (!enabled || accessToken) return;
 
     const timeout = setTimeout(() => {
       if (accessToken) return;
@@ -151,10 +153,10 @@ export function useCompleteGoogleSignIn(active = true) {
     }, OAUTH_FINISH_TIMEOUT_MS);
 
     return () => clearTimeout(timeout);
-  }, [active, accessToken]);
+  }, [enabled, accessToken]);
 
   useEffect(() => {
-    if (!active || accessToken || timedOutRef.current) return;
+    if (!enabled || accessToken || timedOutRef.current) return;
 
     if (response?.type === 'cancel' || response?.type === 'dismiss') {
       void clearPendingGoogleOAuth();
@@ -214,6 +216,7 @@ export function useCompleteGoogleSignIn(active = true) {
         .then(() => {
           pendingNavRef.current = true;
           void clearPendingGoogleOAuth();
+          router.replace('/(tabs)/nearby');
         })
         .catch((err) => {
           setLastGoogleAuthError(googleAuthErrorMessage(err));
@@ -229,7 +232,7 @@ export function useCompleteGoogleSignIn(active = true) {
       cancelled = true;
     };
   }, [
-    active,
+    enabled,
     response,
     authReturnUrl,
     accessToken,
@@ -238,13 +241,13 @@ export function useCompleteGoogleSignIn(active = true) {
   ]);
 
   useEffect(() => {
-    if (!active || !accessToken || !pendingNavRef.current) return;
+    if (!enabled || !accessToken || !pendingNavRef.current) return;
     pendingNavRef.current = false;
     const task = InteractionManager.runAfterInteractions(() => {
       router.replace('/(tabs)/nearby');
     });
     return () => task.cancel();
-  }, [active, accessToken]);
+  }, [enabled, accessToken]);
 }
 
 /** Root handler: skip dedicated redirect routes (they use useGoogleOAuthRedirectScreen). */

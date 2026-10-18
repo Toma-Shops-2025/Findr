@@ -1,8 +1,9 @@
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, typography } from '@/constants/theme';
+import { useAuth } from '@/lib/auth';
 import { useGoogleOAuthRedirectScreen } from '@/lib/googleOAuthRedirectScreen';
 import { clearPendingGoogleOAuth } from '@/lib/googleOAuthRecovery';
 import { setLastGoogleAuthError } from '@/lib/googleAuthErrors';
@@ -11,7 +12,12 @@ WebBrowser.maybeCompleteAuthSession();
 
 /** findr://oauthredirect — complete Google sign-in on this route. */
 export default function GoogleOAuthRedirect() {
+  const { accessToken } = useAuth();
   const statusLine = useGoogleOAuthRedirectScreen();
+
+  if (accessToken) {
+    return <Redirect href="/(tabs)/nearby" />;
+  }
 
   return (
     <View style={styles.wrap}>

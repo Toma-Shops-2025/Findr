@@ -25,7 +25,7 @@ import { useAuth } from '@/lib/auth';
 let globalGoogleFinishInFlight = false;
 let globalGoogleResolveInFlight = false;
 
-const OAUTH_FINISH_TIMEOUT_MS = 45_000;
+const OAUTH_FINISH_TIMEOUT_MS = 25_000;
 
 function idTokenFromUrl(url: string | null): string | null {
   if (!url) return null;
@@ -66,36 +66,26 @@ function oauthUrlHasAuthCode(url: string | null): boolean {
   }
 }
 
+/** Wait only while the browser is open and we have not received a redirect URL yet. */
 function shouldWaitForAuthSessionResponse(
   response: AuthSessionResult | null,
-  sawBrowserOpen: boolean,
+  authReturnUrl: string | null,
 ): boolean {
-  if (response?.type === 'opened') return true;
-  if (
-    sawBrowserOpen &&
-    response?.type !== 'success' &&
-    response?.type !== 'error' &&
-    response?.type !== 'cancel' &&
-    response?.type !== 'dismiss'
-  ) {
-    return true;
-  }
-  return false;
+  if (response?.type !== 'opened') return false;
+  if (!authReturnUrl || !isGoogleOAuthReturnUrl(authReturnUrl)) return true;
+  return !oauthUrlHasAuthCode(authReturnUrl) && !idTokenFromUrl(authReturnUrl);
 }
 
 async function resolveGoogleIdToken(
   response: AuthSessionResult | null,
   authReturnUrl: string | null,
   request: { parseReturnUrl: (u: string) => AuthSessionResult } | null,
-  options: { allowCodeExchange: boolean },
 ): Promise<string | null> {
   const fromResponse = idTokenFromGoogleResponse(response);
   if (fromResponse) return fromResponse;
 
   const fromUrl = tokenFromAuthUrl(authReturnUrl, request);
   if (fromUrl) return fromUrl;
-
-  if (!options.allowCodeExchange) return null;
 
   if (authReturnUrl && isGoogleOAuthReturnUrl(authReturnUrl)) {
     if (!oauthUrlHasAuthCode(authReturnUrl)) {
@@ -121,13 +111,6 @@ export function useCompleteGoogleSignIn(active = true) {
   const finishingRef = useRef(false);
   const pendingNavRef = useRef(false);
   const timedOutRef = useRef(false);
-  const sawBrowserOpenRef = useRef(false);
-
-  useEffect(() => {
-    if (response?.type === 'opened') {
-      sawBrowserOpenRef.current = true;
-    }
-  }, [response]);
   const linkUrl = Linking.useURL();
   const [initialUrl, setInitialUrl] = useState<string | null>(null);
   const [coldStartOAuthUrl, setColdStartOAuthUrl] = useState<string | null>(null);
@@ -148,9 +131,7 @@ export function useCompleteGoogleSignIn(active = true) {
     if (!active || accessToken) return;
 
     const timeout = setTimeout(() => {
-      if (accessToken || finishingRef.current || globalGoogleFinishInFlight) {
-        return;
-      }
+      if (accessToken) return;
       timedOutRef.current = true;
       setLastGoogleAuthError(
         'Google sign-in timed out. Try again or use email login.',
@@ -180,31 +161,19 @@ export function useCompleteGoogleSignIn(active = true) {
     let cancelled = false;
 
     void (async () => {
-      if (
-        authReturnUrl &&
-        isAbandonedGoogleOAuthReturn(authReturnUrl)
-      ) {
+      if (authReturnUrl && isAbandonedGoogleOAuthReturn(authReturnUrl)) {
         return;
       }
-      if (
-        shouldWaitForAuthSessionResponse(
-          response,
-          sawBrowserOpenRef.current,
-        )
-      ) {
+      if (shouldWaitForAuthSessionResponse(response, authReturnUrl)) {
         return;
       }
 
       if (globalGoogleResolveInFlight) return;
 
-      const allowCodeExchange = !sawBrowserOpenRef.current;
-
       globalGoogleResolveInFlight = true;
       let token: string | null = null;
       try {
-        token = await resolveGoogleIdToken(response, authReturnUrl, request, {
-          allowCodeExchange,
-        });
+        token = await resolveGoogleIdToken(response, authReturnUrl, request);
       } finally {
         globalGoogleResolveInFlight = false;
       }
@@ -212,7 +181,6 @@ export function useCompleteGoogleSignIn(active = true) {
 
       if (
         !token &&
-        allowCodeExchange &&
         authReturnUrl &&
         isGoogleOAuthReturnUrl(authReturnUrl) &&
         oauthUrlHasAuthCode(authReturnUrl)

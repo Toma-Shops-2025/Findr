@@ -24,6 +24,9 @@ const GOOGLE_TOKEN_DISCOVERY = {
 
 const PENDING_MAX_AGE_MS = 10 * 60 * 1000;
 
+/** Same-process fallback when SecureStore read lags after the browser returns. */
+let memoryPendingOAuth: PendingGoogleOAuth | null = null;
+
 /** Avoid re-running a failed code exchange for the same deep link forever. */
 let abandonedOAuthReturnUrl: string | null = null;
 
@@ -58,14 +61,23 @@ export async function savePendingGoogleOAuth(input: {
     ...input,
     savedAt: Date.now(),
   };
+  memoryPendingOAuth = payload;
   await writePreference(PENDING_KEY, JSON.stringify(payload));
 }
 
 export async function clearPendingGoogleOAuth(): Promise<void> {
+  memoryPendingOAuth = null;
   await deletePreference(PENDING_KEY);
 }
 
 export async function loadPendingGoogleOAuth(): Promise<PendingGoogleOAuth | null> {
+  if (memoryPendingOAuth) {
+    if (Date.now() - memoryPendingOAuth.savedAt > PENDING_MAX_AGE_MS) {
+      memoryPendingOAuth = null;
+    } else {
+      return memoryPendingOAuth;
+    }
+  }
   const raw = await readPreference(PENDING_KEY);
   if (!raw) return null;
   try {

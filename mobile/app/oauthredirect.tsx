@@ -1,8 +1,11 @@
+import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, typography } from '@/constants/theme';
 import { useCompleteGoogleSignIn } from '@/lib/completeGoogleSignIn';
+import { clearPendingGoogleOAuth } from '@/lib/googleOAuthRecovery';
+import { setLastGoogleAuthError } from '@/lib/googleAuthErrors';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -14,6 +17,16 @@ export default function GoogleOAuthRedirect() {
     <View style={styles.wrap}>
       <ActivityIndicator color={colors.coral} size="large" />
       <Text style={styles.text}>Finishing Google sign-in…</Text>
+      <Pressable
+        onPress={() => {
+          setLastGoogleAuthError(null);
+          void clearPendingGoogleOAuth();
+          router.replace('/(auth)/login');
+        }}
+        accessibilityRole="button"
+      >
+        <Text style={styles.cancel}>Cancel and return to login</Text>
+      </Pressable>
     </View>
   );
 }
@@ -32,5 +45,11 @@ const styles = StyleSheet.create({
     color: colors.mistMuted,
     fontSize: 15,
     textAlign: 'center',
+  },
+  cancel: {
+    fontFamily: typography.bodyMedium,
+    color: colors.teal,
+    fontSize: 15,
+    marginTop: 8,
   },
 });

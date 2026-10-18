@@ -161,10 +161,7 @@ export function useCompleteGoogleSignIn(active = true) {
     let cancelled = false;
 
     void (async () => {
-      if (
-        authReturnUrl &&
-        isAbandonedGoogleOAuthReturn(authReturnUrl)
-      ) {
+      if (authReturnUrl && isAbandonedGoogleOAuthReturn(authReturnUrl)) {
         return;
       }
       if (shouldWaitForAuthSessionResponse(response, authReturnUrl)) {

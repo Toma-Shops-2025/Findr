@@ -6,7 +6,8 @@ import Constants from 'expo-constants';
 import { useCallback } from 'react';
 import { Platform } from 'react-native';
 
-import { savePendingGoogleOAuth } from '@/lib/googleOAuthRecovery';
+import { clearAbandonedGoogleOAuthReturn, savePendingGoogleOAuth } from '@/lib/googleOAuthRecovery';
+import { resetGoogleOAuthFinishLocks } from '@/lib/googleOAuthFinishLocks';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -81,6 +82,8 @@ export function useGoogleAuthRequest() {
   const promptAsync = useCallback(
     async (...args: Parameters<typeof promptAsyncBase>) => {
       if (request?.codeVerifier && clientId) {
+        resetGoogleOAuthFinishLocks();
+        clearAbandonedGoogleOAuthReturn();
         await savePendingGoogleOAuth(
           {
             codeVerifier: request.codeVerifier,

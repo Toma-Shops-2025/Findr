@@ -1,7 +1,7 @@
 import type { AuthSessionResult } from 'expo-auth-session';
 import { getQueryParams } from 'expo-auth-session/build/QueryParams';
 import * as Linking from 'expo-linking';
-import { router, useGlobalSearchParams } from 'expo-router';
+import { router, useGlobalSearchParams, usePathname } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { InteractionManager } from 'react-native';
 
@@ -23,10 +23,12 @@ import {
   readGoogleOAuthReturnUrl,
 } from '@/lib/googleOAuthRecovery';
 import { useAuth } from '@/lib/auth';
-
-/** Prevent duplicate API calls when root handler + oauth redirect screen both mount. */
-let globalGoogleFinishInFlight = false;
-let globalGoogleResolveInFlight = false;
+import {
+  endOAuthLogin,
+  endOAuthResolve,
+  tryBeginOAuthLogin,
+  tryBeginOAuthResolve,
+} from '@/lib/googleOAuthFinishLocks';
 
 const OAUTH_FINISH_TIMEOUT_MS = 25_000;
 
@@ -170,20 +172,23 @@ export function useCompleteGoogleSignIn(active = true) {
 
     void (async () => {
       if (authReturnUrl && isAbandonedGoogleOAuthReturn(authReturnUrl)) {
+        setLastGoogleAuthError(
+          'Google sign-in was interrupted. Try again or use email login.',
+        );
+        router.replace('/(auth)/login');
         return;
       }
       if (shouldWaitForAuthSessionResponse(response, authReturnUrl)) {
         return;
       }
 
-      if (globalGoogleResolveInFlight) return;
+      if (!tryBeginOAuthResolve()) return;
 
-      globalGoogleResolveInFlight = true;
       let token: string | null = null;
       try {
         token = await resolveGoogleIdToken(response, authReturnUrl, request);
       } finally {
-        globalGoogleResolveInFlight = false;
+        endOAuthResolve();
       }
       if (cancelled) return;
 
@@ -200,12 +205,10 @@ export function useCompleteGoogleSignIn(active = true) {
         return;
       }
 
-      if (!token || finishingRef.current || globalGoogleFinishInFlight) {
-        return;
-      }
+      if (!token || finishingRef.current) return;
+      if (!tryBeginOAuthLogin()) return;
 
       finishingRef.current = true;
-      globalGoogleFinishInFlight = true;
       setLastGoogleAuthError(null);
       void loginWithGoogle(token)
         .then(() => {
@@ -218,7 +221,7 @@ export function useCompleteGoogleSignIn(active = true) {
         })
         .finally(() => {
           finishingRef.current = false;
-          globalGoogleFinishInFlight = false;
+          endOAuthLogin();
         });
     })();
 
@@ -244,7 +247,10 @@ export function useCompleteGoogleSignIn(active = true) {
   }, [active, accessToken]);
 }
 
-/** Root handler: always active so cold-start deep links still finish if routing misses oauth screens. */
+/** Root handler: skip dedicated redirect routes (they use useGoogleOAuthRedirectScreen). */
 export function useCompleteGoogleSignInAtRoot() {
-  useCompleteGoogleSignIn(true);
+  const pathname = usePathname();
+  const onRedirect =
+    pathname === '/oauth2redirect' || pathname === '/oauthredirect';
+  useCompleteGoogleSignIn(!onRedirect);
 }

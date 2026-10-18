@@ -194,6 +194,14 @@ async function exchangeAuthCodeForIdToken(
   return null;
 }
 
+export async function exchangeGoogleIdTokenFromAuthCode(
+  code: string,
+): Promise<string | null> {
+  const { redirectUri } = getGoogleOAuthClientConfig();
+  const url = `${redirectUri}?code=${encodeURIComponent(code)}`;
+  return exchangeGoogleIdTokenFromUrl(url);
+}
+
 export async function exchangeGoogleIdTokenFromUrl(
   url: string,
 ): Promise<string | null> {

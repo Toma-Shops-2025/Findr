@@ -3,7 +3,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, typography } from '@/constants/theme';
-import { useCompleteGoogleSignIn } from '@/lib/completeGoogleSignIn';
+import { useGoogleOAuthRedirectScreen } from '@/lib/googleOAuthRedirectScreen';
 import { clearPendingGoogleOAuth } from '@/lib/googleOAuthRecovery';
 import { setLastGoogleAuthError } from '@/lib/googleAuthErrors';
 
@@ -11,12 +11,12 @@ WebBrowser.maybeCompleteAuthSession();
 
 /** findr://oauthredirect — complete Google sign-in on this route. */
 export default function GoogleOAuthRedirect() {
-  useCompleteGoogleSignIn(true);
+  const statusLine = useGoogleOAuthRedirectScreen();
 
   return (
     <View style={styles.wrap}>
       <ActivityIndicator color={colors.coral} size="large" />
-      <Text style={styles.text}>Finishing Google sign-in…</Text>
+      <Text style={styles.text}>{statusLine}</Text>
       <Pressable
         onPress={() => {
           setLastGoogleAuthError(null);

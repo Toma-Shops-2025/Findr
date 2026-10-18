@@ -51,11 +51,25 @@ export function isGoogleOAuthReturnUrl(url: string): boolean {
   );
 }
 
-export async function savePendingGoogleOAuth(input: {
-  codeVerifier: string;
-  redirectUri: string;
-  clientId: string;
-}): Promise<void> {
+export type SavePendingGoogleOAuthOptions = {
+  /** True when the user taps Continue with Google — always refresh PKCE. */
+  force?: boolean;
+};
+
+export async function savePendingGoogleOAuth(
+  input: {
+    codeVerifier: string;
+    redirectUri: string;
+    clientId: string;
+  },
+  options: SavePendingGoogleOAuthOptions = {},
+): Promise<void> {
+  if (!options.force) {
+    const existing = await loadPendingGoogleOAuth();
+    if (existing) {
+      return;
+    }
+  }
   clearAbandonedGoogleOAuthReturn();
   const payload: PendingGoogleOAuth = {
     ...input,
@@ -108,8 +122,9 @@ export async function exchangeGoogleIdTokenFromUrl(
   const { params, errorCode } = QueryParams.getQueryParams(url);
   if (errorCode || params.error) return null;
 
-  const code = params.code;
-  if (!code) return null;
+  const rawCode = params.code;
+  const code = Array.isArray(rawCode) ? rawCode[0] : rawCode;
+  if (!code || typeof code !== 'string') return null;
 
   const pending = await loadPendingGoogleOAuth();
   if (!pending) return null;

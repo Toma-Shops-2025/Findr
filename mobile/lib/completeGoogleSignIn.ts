@@ -16,6 +16,7 @@ import {
   exchangeGoogleIdTokenFromUrl,
   isAbandonedGoogleOAuthReturn,
   isGoogleOAuthReturnUrl,
+  loadPendingGoogleOAuth,
   markGoogleOAuthReturnAbandoned,
   readGoogleOAuthReturnUrl,
 } from '@/lib/googleOAuthRecovery';
@@ -123,6 +124,12 @@ export function useCompleteGoogleSignIn(active = true) {
     void readGoogleOAuthReturnUrl().then((url) => {
       if (url) setColdStartOAuthUrl(url);
     });
+    const sub = Linking.addEventListener('url', (event) => {
+      if (isGoogleOAuthReturnUrl(event.url)) {
+        setColdStartOAuthUrl(event.url);
+      }
+    });
+    return () => sub.remove();
   }, [active]);
 
   const authReturnUrl = linkUrl ?? initialUrl ?? coldStartOAuthUrl;
@@ -186,8 +193,11 @@ export function useCompleteGoogleSignIn(active = true) {
         oauthUrlHasAuthCode(authReturnUrl)
       ) {
         markGoogleOAuthReturnAbandoned(authReturnUrl);
+        const pending = await loadPendingGoogleOAuth();
         setLastGoogleAuthError(
-          'Google sign-in could not be completed. Try again or use email login.',
+          pending
+            ? 'Google sign-in could not be completed. Try again or use email login.'
+            : 'Google sign-in session expired after returning from Google. Try again.',
         );
         void clearPendingGoogleOAuth();
         router.replace('/(auth)/login');

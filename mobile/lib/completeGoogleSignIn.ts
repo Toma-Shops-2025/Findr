@@ -25,10 +25,10 @@ import {
 import { useAuth } from '@/lib/auth';
 import { GOOGLE_AUTH_DISABLED } from '@/lib/authUi';
 import {
+  acquireOAuthLogin,
+  acquireOAuthResolve,
   endOAuthLogin,
   endOAuthResolve,
-  tryBeginOAuthLogin,
-  tryBeginOAuthResolve,
 } from '@/lib/googleOAuthFinishLocks';
 
 const OAUTH_FINISH_TIMEOUT_MS = 25_000;
@@ -108,6 +108,9 @@ export function useCompleteGoogleSignIn(active = true) {
   const finishingRef = useRef(false);
   const pendingNavRef = useRef(false);
   const timedOutRef = useRef(false);
+  const oauthSucceededRef = useRef(false);
+  const accessTokenRef = useRef(accessToken);
+  accessTokenRef.current = accessToken;
   const routeParams = useGlobalSearchParams();
   const routerOAuthUrl = useMemo(
     () => googleOAuthReturnUrlFromRouteParams(routeParams as Record<string, unknown>),
@@ -143,7 +146,10 @@ export function useCompleteGoogleSignIn(active = true) {
     if (!enabled || accessToken) return;
 
     const timeout = setTimeout(() => {
-      if (accessToken) return;
+      if (oauthSucceededRef.current || accessTokenRef.current) {
+        router.replace('/(tabs)/nearby');
+        return;
+      }
       timedOutRef.current = true;
       setLastGoogleAuthError(
         'Google sign-in timed out. Try again or use email login.',
@@ -184,7 +190,7 @@ export function useCompleteGoogleSignIn(active = true) {
         return;
       }
 
-      if (!tryBeginOAuthResolve()) return;
+      if (!(await acquireOAuthResolve())) return;
 
       let token: string | null = null;
       try {
@@ -208,13 +214,15 @@ export function useCompleteGoogleSignIn(active = true) {
       }
 
       if (!token || finishingRef.current) return;
-      if (!tryBeginOAuthLogin()) return;
+      if (!(await acquireOAuthLogin())) return;
 
       finishingRef.current = true;
       setLastGoogleAuthError(null);
       void loginWithGoogle(token)
         .then(() => {
+          oauthSucceededRef.current = true;
           pendingNavRef.current = true;
+          setLastGoogleAuthError(null);
           void clearPendingGoogleOAuth();
           router.replace('/(tabs)/nearby');
         })
@@ -230,6 +238,7 @@ export function useCompleteGoogleSignIn(active = true) {
 
     return () => {
       cancelled = true;
+      endOAuthResolve();
     };
   }, [
     enabled,
@@ -250,10 +259,12 @@ export function useCompleteGoogleSignIn(active = true) {
   }, [enabled, accessToken]);
 }
 
-/** Root handler: skip dedicated redirect routes (they use useGoogleOAuthRedirectScreen). */
+/** Root handler: only for in-app returns — not login/onboarding or oauth redirect screens. */
 export function useCompleteGoogleSignInAtRoot() {
   const pathname = usePathname();
-  const onRedirect =
+  const onDedicatedOAuth =
     pathname === '/oauth2redirect' || pathname === '/oauthredirect';
-  useCompleteGoogleSignIn(!onRedirect);
+  const onAuthEntry =
+    pathname.includes('login') || pathname.includes('onboarding');
+  useCompleteGoogleSignIn(!onDedicatedOAuth && !onAuthEntry);
 }

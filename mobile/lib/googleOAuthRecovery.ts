@@ -24,6 +24,9 @@ const GOOGLE_TOKEN_DISCOVERY = {
 
 const PENDING_MAX_AGE_MS = 10 * 60 * 1000;
 
+/** Verifier captured at promptAsync — survives hook remounts until sign-in finishes. */
+let promptLockedOAuth: PendingGoogleOAuth | null = null;
+
 /** Same-process fallback when SecureStore read lags after the browser returns. */
 let memoryPendingOAuth: PendingGoogleOAuth | null = null;
 
@@ -51,6 +54,37 @@ export function isGoogleOAuthReturnUrl(url: string): boolean {
   );
 }
 
+function paramFirst(
+  value: string | string[] | undefined | null,
+): string | null {
+  if (!value) return null;
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value;
+}
+
+/** Expo Router often exposes ?code= as route params while Linking has no query string. */
+export function googleOAuthReturnUrlFromRouteParams(
+  params: Record<string, unknown>,
+): string | null {
+  const code = paramFirst(params.code as string | string[] | undefined);
+  if (!code) return null;
+  const { redirectUri } = getGoogleOAuthClientConfig();
+  const search = new URLSearchParams({ code });
+  const state = paramFirst(params.state as string | string[] | undefined);
+  if (state) search.set('state', state);
+  return `${redirectUri}?${search.toString()}`;
+}
+
+export function extractOAuthAuthCode(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    const { params } = QueryParams.getQueryParams(url);
+    return paramFirst(params.code as string | string[] | undefined);
+  } catch {
+    return null;
+  }
+}
+
 export type SavePendingGoogleOAuthOptions = {
   /** True when the user taps Continue with Google — always refresh PKCE. */
   force?: boolean;
@@ -75,16 +109,25 @@ export async function savePendingGoogleOAuth(
     ...input,
     savedAt: Date.now(),
   };
+  promptLockedOAuth = payload;
   memoryPendingOAuth = payload;
   await writePreference(PENDING_KEY, JSON.stringify(payload));
 }
 
 export async function clearPendingGoogleOAuth(): Promise<void> {
+  promptLockedOAuth = null;
   memoryPendingOAuth = null;
   await deletePreference(PENDING_KEY);
 }
 
 export async function loadPendingGoogleOAuth(): Promise<PendingGoogleOAuth | null> {
+  if (promptLockedOAuth) {
+    if (Date.now() - promptLockedOAuth.savedAt > PENDING_MAX_AGE_MS) {
+      promptLockedOAuth = null;
+    } else {
+      return promptLockedOAuth;
+    }
+  }
   if (memoryPendingOAuth) {
     if (Date.now() - memoryPendingOAuth.savedAt > PENDING_MAX_AGE_MS) {
       memoryPendingOAuth = null;
@@ -114,51 +157,60 @@ export async function loadPendingGoogleOAuth(): Promise<PendingGoogleOAuth | nul
   }
 }
 
+async function exchangeAuthCodeForIdToken(
+  code: string,
+  pending: PendingGoogleOAuth,
+): Promise<string | null> {
+  const config = getGoogleOAuthClientConfig();
+  const redirectUri = pending.redirectUri || config.redirectUri;
+  const clientIds = [
+    pending.clientId || config.clientId,
+    config.webClientId,
+    config.androidOAuthClientId,
+  ].filter((id, index, arr) => Boolean(id) && arr.indexOf(id) === index) as string[];
+
+  for (const clientId of clientIds) {
+    try {
+      const token = await exchangeCodeAsync(
+        {
+          clientId,
+          code,
+          redirectUri,
+          extraParams: {
+            code_verifier: pending.codeVerifier,
+          },
+        },
+        GOOGLE_TOKEN_DISCOVERY,
+      );
+      const idToken = token.idToken ?? null;
+      if (idToken) {
+        await clearPendingGoogleOAuth();
+        return idToken;
+      }
+    } catch (err) {
+      console.warn('Findr Google OAuth code exchange failed', clientId, err);
+    }
+  }
+  return null;
+}
+
 export async function exchangeGoogleIdTokenFromUrl(
   url: string,
 ): Promise<string | null> {
-  if (!isGoogleOAuthReturnUrl(url)) return null;
-
-  const { params, errorCode } = QueryParams.getQueryParams(url);
-  if (errorCode || params.error) return null;
-
-  const rawCode = params.code;
-  const code = Array.isArray(rawCode) ? rawCode[0] : rawCode;
-  if (!code || typeof code !== 'string') return null;
+  const code = extractOAuthAuthCode(url);
+  if (!code) return null;
 
   const pending = await loadPendingGoogleOAuth();
   if (!pending) return null;
 
-  const config = getGoogleOAuthClientConfig();
-  const clientId = pending.clientId || config.clientId;
-  const redirectUri = pending.redirectUri || config.redirectUri;
-
-  try {
-    const token = await exchangeCodeAsync(
-      {
-        clientId,
-        code,
-        redirectUri,
-        extraParams: {
-          code_verifier: pending.codeVerifier,
-        },
-      },
-      GOOGLE_TOKEN_DISCOVERY,
-    );
-    const idToken = token.idToken ?? null;
-    if (idToken) {
-      await clearPendingGoogleOAuth();
-    }
-    return idToken;
-  } catch (err) {
-    console.warn('Findr Google OAuth code exchange failed', err);
-    return null;
-  }
+  return exchangeAuthCodeForIdToken(code, pending);
 }
 
 export async function readGoogleOAuthReturnUrl(): Promise<string | null> {
   const initial = await Linking.getInitialURL();
-  if (initial && isGoogleOAuthReturnUrl(initial)) return initial;
+  if (initial && (isGoogleOAuthReturnUrl(initial) || extractOAuthAuthCode(initial))) {
+    return initial;
+  }
 
   return null;
 }

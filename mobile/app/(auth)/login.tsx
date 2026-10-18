@@ -25,7 +25,6 @@ export default function LoginScreen() {
   const { login, requestPasswordReset } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showEmailLogin, setShowEmailLogin] = useState(!GOOGLE_ONLY_AUTH);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [resetSent, setResetSent] = useState(false);
@@ -74,25 +73,19 @@ export default function LoginScreen() {
             <Text style={styles.support}>
               {GOOGLE_ONLY_AUTH
                 ? 'Sign in with Google. Session ends when you close the app.'
-                : 'Sign in with Google (recommended). Email is for existing accounts.'}
+                : 'Sign in with Google or email. Session ends when you close the app.'}
             </Text>
 
             <GoogleSignInButton />
 
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-
             {!GOOGLE_ONLY_AUTH ? (
-              <Pressable onPress={() => setShowEmailLogin((v) => !v)}>
-                <Text style={styles.forgot}>
-                  {showEmailLogin
-                    ? 'Hide email login'
-                    : 'Use email (existing accounts)'}
-                </Text>
-              </Pressable>
-            ) : null}
-
-            {showEmailLogin && !GOOGLE_ONLY_AUTH ? (
               <>
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>or</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+
                 <Text style={styles.label}>Email</Text>
                 <TextInput
                   value={email}
@@ -151,6 +144,8 @@ export default function LoginScreen() {
                 </Pressable>
               </>
             ) : null}
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
 
             <Link href="/(auth)/onboarding" style={styles.link}>
               New here? Create an account

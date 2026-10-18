@@ -25,7 +25,6 @@ import { GOOGLE_ONLY_AUTH } from '@/lib/authUi';
  */
 export default function OnboardingScreen() {
   const { signup } = useAuth();
-  const [showEmailSignup, setShowEmailSignup] = useState(!GOOGLE_ONLY_AUTH);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [accepted, setAccepted] = useState(false);
@@ -89,7 +88,7 @@ export default function OnboardingScreen() {
             <Text style={styles.support}>
               {GOOGLE_ONLY_AUTH
                 ? 'Inclusive dating for adults 18+. Sign up with Google.'
-                : 'Inclusive dating for adults 18+. Sign up with Google (recommended) or email.'}
+                : 'Inclusive dating for adults 18+. Google or email.'}
             </Text>
 
             <Pressable
@@ -124,17 +123,13 @@ export default function OnboardingScreen() {
             />
 
             {!GOOGLE_ONLY_AUTH ? (
-              <Pressable onPress={() => setShowEmailSignup((v) => !v)}>
-                <Text style={styles.linkInline}>
-                  {showEmailSignup
-                    ? 'Hide email sign-up'
-                    : 'Sign up with email instead'}
-                </Text>
-              </Pressable>
-            ) : null}
-
-            {showEmailSignup && !GOOGLE_ONLY_AUTH ? (
               <>
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>or</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+
                 <Text style={styles.label}>Email</Text>
                 <TextInput
                   value={email}
@@ -156,8 +151,6 @@ export default function OnboardingScreen() {
                   returnKeyType="done"
                 />
 
-                {error ? <Text style={styles.error}>{error}</Text> : null}
-
                 <Pressable
                   style={[styles.cta, busy && styles.ctaDisabled]}
                   onPress={createAccount}
@@ -172,9 +165,7 @@ export default function OnboardingScreen() {
               </>
             ) : null}
 
-            {!showEmailSignup && error ? (
-              <Text style={styles.error}>{error}</Text>
-            ) : null}
+            {error ? <Text style={styles.error}>{error}</Text> : null}
 
             <Link href="/(auth)/login" style={styles.link}>
               Already have an account? Log in

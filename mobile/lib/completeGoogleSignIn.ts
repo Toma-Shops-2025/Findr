@@ -1,8 +1,8 @@
 import type { AuthSessionResult } from 'expo-auth-session';
 import { getQueryParams } from 'expo-auth-session/build/QueryParams';
 import * as Linking from 'expo-linking';
-import { router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { router, useGlobalSearchParams } from 'expo-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { InteractionManager } from 'react-native';
 
 import { idTokenFromGoogleResponse } from '@/lib/googleAuth';
@@ -14,6 +14,8 @@ import { useGoogleAuthSession } from '@/lib/googleAuthContext';
 import {
   clearPendingGoogleOAuth,
   exchangeGoogleIdTokenFromUrl,
+  extractOAuthAuthCode,
+  googleOAuthReturnUrlFromRouteParams,
   isAbandonedGoogleOAuthReturn,
   isGoogleOAuthReturnUrl,
   loadPendingGoogleOAuth,
@@ -57,14 +59,7 @@ function tokenFromAuthUrl(
 }
 
 function oauthUrlHasAuthCode(url: string | null): boolean {
-  if (!url) return false;
-  try {
-    const { params } = getQueryParams(url);
-    const code = params.code;
-    return typeof code === 'string' && code.length > 0;
-  } catch {
-    return false;
-  }
+  return Boolean(extractOAuthAuthCode(url));
 }
 
 /** Wait only while the browser is open and we have not received a redirect URL yet. */
@@ -88,10 +83,7 @@ async function resolveGoogleIdToken(
   const fromUrl = tokenFromAuthUrl(authReturnUrl, request);
   if (fromUrl) return fromUrl;
 
-  if (authReturnUrl && isGoogleOAuthReturnUrl(authReturnUrl)) {
-    if (!oauthUrlHasAuthCode(authReturnUrl)) {
-      return null;
-    }
+  if (authReturnUrl && oauthUrlHasAuthCode(authReturnUrl)) {
     for (let attempt = 0; attempt < 8; attempt++) {
       const token = await exchangeGoogleIdTokenFromUrl(authReturnUrl);
       if (token) return token;
@@ -112,6 +104,11 @@ export function useCompleteGoogleSignIn(active = true) {
   const finishingRef = useRef(false);
   const pendingNavRef = useRef(false);
   const timedOutRef = useRef(false);
+  const routeParams = useGlobalSearchParams();
+  const routerOAuthUrl = useMemo(
+    () => googleOAuthReturnUrlFromRouteParams(routeParams as Record<string, unknown>),
+    [routeParams],
+  );
   const linkUrl = Linking.useURL();
   const [initialUrl, setInitialUrl] = useState<string | null>(null);
   const [coldStartOAuthUrl, setColdStartOAuthUrl] = useState<string | null>(null);
@@ -125,14 +122,18 @@ export function useCompleteGoogleSignIn(active = true) {
       if (url) setColdStartOAuthUrl(url);
     });
     const sub = Linking.addEventListener('url', (event) => {
-      if (isGoogleOAuthReturnUrl(event.url)) {
+      if (
+        isGoogleOAuthReturnUrl(event.url) ||
+        extractOAuthAuthCode(event.url)
+      ) {
         setColdStartOAuthUrl(event.url);
       }
     });
     return () => sub.remove();
   }, [active]);
 
-  const authReturnUrl = linkUrl ?? initialUrl ?? coldStartOAuthUrl;
+  const authReturnUrl =
+    linkUrl ?? routerOAuthUrl ?? initialUrl ?? coldStartOAuthUrl;
 
   useEffect(() => {
     if (!active || accessToken) return;
@@ -186,12 +187,7 @@ export function useCompleteGoogleSignIn(active = true) {
       }
       if (cancelled) return;
 
-      if (
-        !token &&
-        authReturnUrl &&
-        isGoogleOAuthReturnUrl(authReturnUrl) &&
-        oauthUrlHasAuthCode(authReturnUrl)
-      ) {
+      if (!token && authReturnUrl && oauthUrlHasAuthCode(authReturnUrl)) {
         markGoogleOAuthReturnAbandoned(authReturnUrl);
         const pending = await loadPendingGoogleOAuth();
         setLastGoogleAuthError(

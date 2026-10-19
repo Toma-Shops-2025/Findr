@@ -10,6 +10,8 @@ cd api && npm run typecheck
 
 CI workflow **`.github/workflows/ci-guardrails.yml`** runs **`test:oauth`** (required) plus typecheck on every pull request.
 
+Local **pre-push** hook (optional, recommended): `./scripts/install-git-hooks.sh` — see **`docs/findr-v58-release-checklist.md`** Step 0.
+
 ### PR checklist (humans + agents)
 
 - [ ] Touched `mobile/lib/google*` or `auth.tsx`? Run `npm run test:oauth`.

@@ -7,6 +7,11 @@ import { registerRealtimeClient } from '../modules/realtime/hub.js';
 export const realtimeRoutes: FastifyPluginAsync = async (app) => {
   await app.register(websocket);
 
+  app.get('/health', async () => ({
+    ok: true,
+    wsPath: '/realtime/ws',
+  }));
+
   app.get('/ws', { websocket: true }, (socket, req) => {
     const token =
       (req.query as { token?: string }).token ??

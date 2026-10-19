@@ -1,17 +1,16 @@
-import Constants from 'expo-constants';
+import { getApiBaseUrl } from '@/lib/api';
 
 type RealtimeHandlers = {
   onMessage?: (conversationId: string, message: unknown) => void;
   onTyping?: (conversationId: string, userId: string, active: boolean) => void;
 };
 
-function apiWsBase(): string {
-  const extra = Constants.expoConfig?.extra as { apiUrl?: string } | undefined;
-  const http =
-    extra?.apiUrl ??
-    process.env.EXPO_PUBLIC_API_URL ??
-    'https://api.myfindr.fun';
-  return http.replace(/^http/, 'ws') + '/realtime/ws';
+export function realtimeWebSocketUrl(): string {
+  const http = getApiBaseUrl();
+  const ws = http
+    .replace(/^https:\/\//i, 'wss://')
+    .replace(/^http:\/\//i, 'ws://');
+  return `${ws}/realtime/ws`;
 }
 
 export class FindrRealtime {
@@ -27,7 +26,7 @@ export class FindrRealtime {
 
   private open() {
     if (!this.token) return;
-    const url = `${apiWsBase()}?token=${encodeURIComponent(this.token)}`;
+    const url = `${realtimeWebSocketUrl()}?token=${encodeURIComponent(this.token)}`;
     this.socket?.close();
     const ws = new WebSocket(url);
     this.socket = ws;

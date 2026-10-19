@@ -125,7 +125,7 @@ class MemoryUserStore {
     return this.usersById.get(id) ?? null;
   }
 
-  /** Demo / nearby helpers â€” memory only. */
+  /** Demo / nearby helpers — memory only. */
   async listIds(): Promise<string[]> {
     return [...this.usersById.keys()];
   }
@@ -160,7 +160,8 @@ class MemoryUserStore {
     }
     const byEmail = await this.findByEmail(email);
     if (byEmail) {
-      throw Object.assign(new Error('email_taken'), { code: 'email_taken' });
+      this.authSubjects.set(subject, byEmail.id);
+      return toPublic(byEmail);
     }
     const now = new Date().toISOString();
     const user: UserRecord = {
@@ -299,6 +300,23 @@ class PostgresUserStore {
     return row ? rowToUser(row) : null;
   }
 
+  async findByGoogleSub(googleSub: string): Promise<UserRecord | null> {
+    const subject = `google:${googleSub}`;
+    const bySubject = await this.findByAuthSubject(subject);
+    if (bySubject) return bySubject;
+    const result = await this.pool.query(
+      `SELECT id, email, password_hash, date_of_birth::text AS date_of_birth,
+              tos_accepted_at, privacy_accepted_at,
+              age_gate_accepted_at, created_at
+       FROM users
+       WHERE google_sub = $1 AND deleted_at IS NULL
+       LIMIT 1`,
+      [googleSub],
+    );
+    const row = result.rows[0];
+    return row ? rowToUser(row) : null;
+  }
+
   async upsertGoogleUser(input: {
     googleSub: string;
     email: string;
@@ -308,24 +326,35 @@ class PostgresUserStore {
   }): Promise<PublicUser> {
     const email = normalizeEmail(input.email);
     const subject = `google:${input.googleSub}`;
-    const existing = await this.findByAuthSubject(subject);
-    if (existing) {
-      return toPublic(existing);
+    const byGoogle = await this.findByGoogleSub(input.googleSub);
+    if (byGoogle) {
+      return toPublic(byGoogle);
     }
     const byEmail = await this.findByEmail(email);
     if (byEmail) {
-      throw Object.assign(new Error('email_taken'), { code: 'email_taken' });
+      const link = await this.pool.query(
+        `UPDATE users
+         SET google_sub = $2, updated_at = now()
+         WHERE id = $1 AND deleted_at IS NULL
+           AND (google_sub IS NULL OR google_sub = $2)
+         RETURNING id`,
+        [byEmail.id, input.googleSub],
+      );
+      if ((link.rowCount ?? 0) === 0) {
+        throw Object.assign(new Error('email_taken'), { code: 'email_taken' });
+      }
+      return toPublic(byEmail);
     }
 
     const result = await this.pool.query(
       `INSERT INTO users (
-         auth_subject, email, password_hash, date_of_birth,
+         auth_subject, email, password_hash, date_of_birth, google_sub,
          tos_accepted_at, privacy_accepted_at, age_gate_accepted_at
-       ) VALUES ($1, $2, NULL, NULL, now(), now(), now())
+       ) VALUES ($1, $2, NULL, NULL, $3, now(), now(), now())
        RETURNING id, email, date_of_birth::text AS date_of_birth,
                  tos_accepted_at, privacy_accepted_at, age_gate_accepted_at,
                  created_at`,
-      [subject, email],
+      [subject, email, input.googleSub],
     );
     const row = result.rows[0];
     return {

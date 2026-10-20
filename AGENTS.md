@@ -5,7 +5,7 @@
 Google sign-in is **production-critical**. Before merging mobile auth changes:
 
 1. Run **`cd mobile && npm run test:oauth`** and **`npm run typecheck`**.
-2. Humans: install **`./scripts/install-git-hooks.sh`** once per clone so `git push` runs `test:oauth` when OAuth files change.
+2. Humans: install git hooks once per clone — PowerShell: **`.\scripts\install-git-hooks.ps1`** or **`git config core.hooksPath scripts/git-hooks`**; macOS/Linux: **`./scripts/install-git-hooks.sh`**.
 3. Run **`cd api && npm run typecheck`** if you touched auth or user store.
 4. Read **`docs/google-oauth-regression.md`** — files and rules below.
 

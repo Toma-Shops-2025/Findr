@@ -11,14 +11,28 @@ Use this **in order** after merging the Google return-sign-in + guardrails work 
 **How:**
 
 1. Open a terminal in your Findr repo folder (where `.git` lives).
-2. Run:
+2. Run **one** of these (from the repo root):
+
+   **PowerShell (Windows — no bash needed):**
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\scripts\install-git-hooks.ps1
+   ```
+
+   **Or manually:**
+
+   ```powershell
+   git config core.hooksPath scripts/git-hooks
+   ```
+
+   **macOS / Linux / Git Bash:**
 
    ```bash
    chmod +x scripts/install-git-hooks.sh
    ./scripts/install-git-hooks.sh
    ```
 
-3. You should see: `core.hooksPath = scripts/git-hooks`.
+3. Confirm: `git config core.hooksPath` → should print `scripts/git-hooks`.
 
 **Notes:**
 

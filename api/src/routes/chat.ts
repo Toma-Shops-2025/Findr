@@ -18,6 +18,7 @@ import { getProfileStore } from '../modules/profiles/profileStore.js';
 import { peerChatDistanceLabel } from '../modules/geo/peerChatDistance.js';
 import { getBlockStore } from '../modules/safety/blockStore.js';
 import { publishMessage } from '../modules/realtime/hub.js';
+import { chatNotificationData } from '../modules/push/deepLink.js';
 import { notifyUserPush } from '../modules/push/notifyUser.js';
 
 /**
@@ -341,10 +342,12 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       const result = await store.sendHelloAttention(auth.userId, peerUserId);
       if (result.sent) {
         const senderName = await peerDisplayName(auth.userId);
-        void notifyUserPush(peerUserId, 'Findr', `${senderName} said hello`, {
-          type: 'hello',
-          conversationId: result.conversationId,
-        });
+        void notifyUserPush(
+          peerUserId,
+          'Findr',
+          `${senderName} said hello`,
+          chatNotificationData(result.conversationId, 'hello'),
+        );
         publishMessage(
           result.conversationId,
           [auth.userId, peerUserId],
@@ -505,10 +508,12 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
           (publicMsg.videoUrl ? 'Sent a video' : '') ||
           (publicMsg.location ? 'Shared a location' : '') ||
           'New message';
-        void notifyUserPush(peer, 'Findr', preview, {
-          type: 'message',
-          conversationId: resolved.conversation.id,
-        });
+        void notifyUserPush(
+          peer,
+          'Findr',
+          preview,
+          chatNotificationData(resolved.conversation.id, 'message'),
+        );
         return { message: publicMsg };
       } catch (err) {
         const code = (err as { code?: string }).code;

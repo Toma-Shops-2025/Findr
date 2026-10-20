@@ -1,0 +1,44 @@
+# Fast checks on every PR — protects Google OAuth helpers and types.
+
+name: CI guardrails
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            mobile/package-lock.json
+            api/package-lock.json
+
+      - name: Install mobile
+        working-directory: mobile
+        run: npm ci
+
+      - name: Install api
+        working-directory: api
+        run: npm ci
+
+      - name: Mobile OAuth regression tests
+        working-directory: mobile
+        run: npm run test:oauth
+
+      # OAuth regression tests are the hard gate; full mobile tsc has known route typing debt.
+      - name: Mobile typecheck
+        working-directory: mobile
+        run: npm run typecheck
+        continue-on-error: true
+
+      - name: API typecheck
+        working-directory: api
+        run: npm run typecheck

@@ -10,6 +10,7 @@ import {
 import { InteractionManager } from 'react-native';
 
 import { GoogleAuthSessionHandler } from '@/components/GoogleAuthSessionHandler';
+import { PushNotificationHandler } from '@/components/PushNotificationHandler';
 import { EPHEMERAL_SESSION } from '@/lib/ephemeralSession';
 import { GoogleAuthProvider } from '@/lib/googleAuthContext';
 import {
@@ -248,6 +249,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={value}>
       <GoogleAuthProvider>
         <GoogleAuthSessionHandler />
+        <PushNotificationHandler />
         {children}
       </GoogleAuthProvider>
     </AuthContext.Provider>

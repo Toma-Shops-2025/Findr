@@ -9,7 +9,8 @@
     "android:go": "expo start --android --go",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:oauth": "tsx --test lib/__tests__/googleOAuth.guard.test.ts && node scripts/verify-google-oauth-url.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
@@ -40,6 +41,7 @@
     "react-native-web": "~0.21.0"
   },
   "devDependencies": {
+    "tsx": "^4.19.4",
     "typescript": "~6.0.3"
   },
   "expo": {

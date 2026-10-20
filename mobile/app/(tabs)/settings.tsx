@@ -304,6 +304,22 @@ export default function SettingsScreen() {
         </View>
       )}
 
+      <Text style={styles.section}>Calls</Text>
+      <Pressable
+        style={styles.row}
+        onPress={() =>
+          Alert.alert(
+            'Voice and video calls',
+            'Live FaceTime-style calls are not available yet. You can still send voice and video messages inside chat.',
+          )
+        }
+        accessibilityRole="button"
+        accessibilityLabel="Voice and video calls, coming soon"
+      >
+        <Text style={styles.rowTitle}>Voice and video calls</Text>
+        <Text style={styles.rowMeta}>Coming soon</Text>
+      </Pressable>
+
       <Text style={styles.section}>Legal & help</Text>
       <Pressable style={styles.row} onPress={() => router.push('/legal/terms')}>
         <Text style={styles.rowTitle}>Terms of Service</Text>

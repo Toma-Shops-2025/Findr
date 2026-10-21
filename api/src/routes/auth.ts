@@ -193,7 +193,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       if (code === 'email_taken') {
         return reply.code(409).send({
           error: 'email_taken',
-          message: 'An account with this email already exists. Log in with email/password.',
+          message:
+            'This email is linked to a different Google account. Use email/password or that Google account.',
         });
       }
       throw err;

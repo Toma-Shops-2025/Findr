@@ -17,7 +17,7 @@ export function googleAuthErrorMessage(err: unknown): string {
     return 'Google sign-in was rejected. Check API Google client IDs on Render.';
   }
   if (e.code === 'email_taken') {
-    return 'This email already has a password account. Log in with email, then link Google later.';
+    return 'This email is tied to a different Google account. Try email and password, or the Google account you used before.';
   }
   if (e.message) return e.message;
   return 'Google sign-in failed. Try again.';

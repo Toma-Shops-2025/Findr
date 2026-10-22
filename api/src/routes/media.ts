@@ -46,6 +46,19 @@ async function makeAlbumRoomForChat(
   }
 }
 
+/** Profile grid photos also sync to album; make room so new profile pics always work. */
+async function makeAlbumRoomForProfile(
+  album: AlbumStoreLike,
+  userId: string,
+  mediaType: MediaType,
+): Promise<void> {
+  if (mediaType !== 'photo') return;
+  const counts = await album.countForUser(userId);
+  if (counts.photos >= ALBUM_MAX_PHOTOS) {
+    await album.deleteOldestForUser(userId, 'photo');
+  }
+}
+
 /**
  * JWT-protected image/video uploads -> local api/uploads/.
  * Chat/camera/album uploads are also saved to the user's personal Findr album.
@@ -177,6 +190,8 @@ export const mediaRoutes: FastifyPluginAsync = async (app) => {
       const album = await getAlbumStore();
       if (kind === 'chat') {
         await makeAlbumRoomForChat(album, auth.userId, saved.mediaType);
+      } else if (kind === 'profile') {
+        await makeAlbumRoomForProfile(album, auth.userId, saved.mediaType);
       }
       let albumItem;
       try {

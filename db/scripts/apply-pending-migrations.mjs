@@ -23,6 +23,8 @@ if (!existsSync(apiPkg)) {
 const require = createRequire(apiPkg);
 const pg = require('pg');
 
+const { pgPoolOptions } = await import('./pgConnection.mjs');
+
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
   console.error('DATABASE_URL is not set.');
@@ -33,7 +35,7 @@ const files = readdirSync(migrationsDir)
   .filter((f) => f.endsWith('.sql'))
   .sort();
 
-const pool = new pg.Pool({ connectionString: databaseUrl });
+const pool = new pg.Pool(pgPoolOptions(databaseUrl));
 
 async function ensureTrackingTable(client) {
   const sql = readFileSync(

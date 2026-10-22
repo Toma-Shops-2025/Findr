@@ -27,7 +27,23 @@ $env:DATABASE_URL = "..."
 node ..\db\scripts\list-push-tokens.mjs mytomaai@gmail.com
 ```
 
-5. Render **findr-api** must have **`EXPO_ACCESS_TOKEN`** set.
+5. Render **findr-api** must have **`EXPO_ACCESS_TOKEN`** set (Expo access token, not the Firebase JSON).
+
+## If chat works but no notification
+
+1. **Both phones** must have a row in the database (not just Android “notifications on”):
+
+```powershell
+node ..\db\scripts\list-push-tokens.mjs mytomaai@gmail.com
+node ..\db\scripts\list-push-tokens.mjs soberdrivertaxi@gmail.com
+```
+
+2. In Render logs, right after someone sends a message, search for **`[findr-push]`**:
+   - `no expo push tokens` → that **receiver** never registered; open Findr → Safety → **Message notifications** (success alert) or reinstall v61+ and log in again.
+   - `EXPO_ACCESS_TOKEN is not set` → add the token on **findr-api** and redeploy.
+   - `expo push ticket errors` → FCM/credentials mismatch (often wrong Expo project or invalid token — re-register on the phone).
+
+3. Test with the receiver app **swiped away** from recents (not only Home). Some devices still deliver with Home, but full swipe rules out “app still polling” confusion.
 
 ## Test delivery
 

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Findr",
     "slug": "findr",
-    "version": "0.1.6",
+    "version": "0.1.7",
     "icon": "./assets/images/findr-logo.png",
     "scheme": "findr",
     "userInterfaceStyle": "dark",
@@ -16,7 +16,7 @@
     },
     "android": {
       "package": "app.findr.mobile",
-      "versionCode": 58,
+      "versionCode": 59,
       "intentFilters": [
         {
           "action": "VIEW",
@@ -35,7 +35,8 @@
         "READ_MEDIA_IMAGES",
         "READ_EXTERNAL_STORAGE",
         "CAMERA",
-        "RECORD_AUDIO"
+        "RECORD_AUDIO",
+        "POST_NOTIFICATIONS"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#000000",

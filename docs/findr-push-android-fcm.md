@@ -29,6 +29,24 @@ node ..\db\scripts\list-push-tokens.mjs mytomaai@gmail.com
 
 5. Render **findr-api** must have **`EXPO_ACCESS_TOKEN`** set (Expo access token, not the Firebase JSON).
 
+## `InvalidCredentials` / “Unable to retrieve the FCM server key”
+
+If `send-test-push.mjs` (or Expo) returns:
+
+`Unable to retrieve the FCM server key for the recipient's app` with `"error":"InvalidCredentials"`
+
+then **phones and DB tokens are fine** — Expo cannot send through **FCM** for project **`fca40da4-74a0-4eba-83e2-ef6155353a86`** (`tomas_empire` / **findr**).
+
+Fix (all must be the **same Firebase project** as your `google-services.json`):
+
+1. [Firebase Console](https://console.firebase.google.com) → open that project → **Project settings** → **Service accounts** → **Generate new private key** (JSON).
+2. [Google Cloud Console](https://console.cloud.google.com) → select the **same** project → **APIs & Services** → enable **Firebase Cloud Messaging API**.
+3. [Expo → findr → Credentials → Android](https://expo.dev/accounts/tomas_empire/projects/findr/credentials) → **production** → **Google Service Account Key for FCM V1** → upload that JSON (remove any old/wrong key first).
+4. Confirm GitHub secret **`GOOGLE_SERVICES_JSON`** is from the **same** Firebase project (open the file and check `project_id`).
+5. Wait 2–5 minutes, run `send-test-push.mjs` again — you want `"status":"ok"`. **No new AAB** required for this step; chat pushes use the same Expo → FCM path.
+
+Do **not** upload the key under a different Expo account or the empty team project — only **[findr under tomas_empire](https://expo.dev/accounts/tomas_empire/projects/findr)**.
+
 ## If chat works but no notification
 
 1. **Both phones** must have a row in the database (not just Android “notifications on”):

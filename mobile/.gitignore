@@ -33,6 +33,9 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Firebase (use GOOGLE_SERVICES_JSON in GitHub Actions or copy locally)
+google-services.json
+
 # typescript
 *.tsbuildinfo
 

@@ -1,0 +1,3 @@
+{
+  "_comment": "Copy your Firebase google-services.json here as google-services.json (same folder). Required for Android push tokens. Do not commit real secrets to a public repo."
+}

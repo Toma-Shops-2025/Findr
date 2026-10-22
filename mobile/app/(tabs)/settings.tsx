@@ -19,6 +19,7 @@ import { CommunityGuidelinesBanner } from '@/components/CommunityGuidelinesBanne
 import { colors, radii, spacing, typography } from '@/constants/theme';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { registerFindrPushToken } from '@/lib/push';
 import { unblockUser } from '@/lib/safety';
 import type { BlockedUser, PublicProfile } from '@/lib/types';
 
@@ -42,6 +43,7 @@ export default function SettingsScreen() {
   const [visibilityLoading, setVisibilityLoading] = useState(true);
   const [visibilitySaving, setVisibilitySaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [pushRegistering, setPushRegistering] = useState(false);
   const [safetyNotices, setSafetyNotices] = useState<
     { id: string; message: string }[]
   >([]);
@@ -303,6 +305,33 @@ export default function SettingsScreen() {
           ))}
         </View>
       )}
+
+      <Text style={styles.section}>Notifications</Text>
+      <Pressable
+        style={styles.row}
+        disabled={!accessToken || pushRegistering}
+        onPress={() => {
+          if (!accessToken) return;
+          setPushRegistering(true);
+          void registerFindrPushToken(accessToken)
+            .then((result) => {
+              if (result.ok) {
+                Alert.alert(
+                  'Message notifications',
+                  'This phone is registered for chat alerts. Send a test message while Findr is in the background.',
+                );
+              } else {
+                Alert.alert('Could not register', result.reason);
+              }
+            })
+            .finally(() => setPushRegistering(false));
+        }}
+      >
+        <Text style={styles.rowTitle}>Message notifications</Text>
+        <Text style={styles.rowMeta}>
+          {pushRegistering ? 'Registering...' : 'Tap to register this phone'}
+        </Text>
+      </Pressable>
 
       <Text style={styles.section}>Calls</Text>
       <Pressable

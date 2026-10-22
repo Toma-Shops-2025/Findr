@@ -9,6 +9,10 @@ export async function notifyUserPush(
 ): Promise<void> {
   const devices = await getDeviceStore();
   const tokens = await devices.listTokens(userId);
+  if (tokens.length === 0) {
+    console.warn('[findr-push] no expo push tokens for user', userId);
+    return;
+  }
   await sendExpoPush(tokens, {
     title,
     body,

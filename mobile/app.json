@@ -17,7 +17,7 @@
     "android": {
       "package": "app.findr.mobile",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 60,
+      "versionCode": 61,
       "intentFilters": [
         {
           "action": "VIEW",

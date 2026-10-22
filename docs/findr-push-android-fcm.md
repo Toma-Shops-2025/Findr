@@ -9,7 +9,7 @@ If `list-push-tokens.mjs` shows **NO ROWS** but notifications are allowed in And
 3. Download **`google-services.json`**.
 4. [Expo docs: FCM credentials](https://docs.expo.dev/push-notifications/fcm-credentials/) — upload the **FCM V1 service account JSON** to Expo (`tomas_empire` → project **findr** → Credentials → Android).
 5. Put `google-services.json` where the Android build can read it:
-   - **GitHub AAB workflow (recommended):** GitHub repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret** named **`GOOGLE_SERVICES_JSON`**. Paste the **entire** file (starts with `{`, ends with `}`).
+   - **GitHub AAB workflow (recommended):** GitHub repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret** named **`GOOGLE_SERVICES_JSON`**. Paste the **entire** file (starts with `{`, ends with `}`). The workflow passes this into `eas build`; `mobile/app.config.js` writes `google-services.json` during prebuild (EAS copies only git-tracked files, so a workflow-only file on disk is not enough).
    - **Local / manual builds:** copy the file to `mobile/google-services.json` (see `mobile/google-services.json.example`). Do not commit it if the repo is public.
 
 `app.json` sets `android.googleServicesFile` to `./google-services.json` (required for `getExpoPushTokenAsync` on production AAB).

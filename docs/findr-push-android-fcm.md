@@ -69,9 +69,9 @@ node ..\db\scripts\list-push-tokens.mjs soberdrivertaxi@gmail.com
 |-----------|-----------|--------|-----------|
 | Foreground (using app) | On | Yes | Optional (usually in chat) |
 | In **recents** (background) | Off | Yes | **Yes** — token stays registered |
-| **Swiped away** (closed) | Off | No (after next open revokes grid) | **No** — tokens cleared on grid revoke / logout |
+| **Swiped away** (closed) | Off | No (after next open revokes grid) | **No** — heartbeat stops (~2 min), tokens cleared on revoke |
 
-No extra “5 minute grace” after close — pushes stop once the app process ends and cold-start revoke runs.
+While the app process is alive (including **recents**), the app pings **`POST /devices/push-alive`** every 30s so chat pushes still work. After swipe-away, pings stop and the server stops delivering within about **2 minutes** (no long grace period).
 
 ## Stale tokens after reinstalls
 

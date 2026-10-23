@@ -32,6 +32,16 @@ export function FindrPresenceLifecycle() {
   useEffect(() => {
     if (!accessToken) return;
 
+    const ping = () => {
+      void apiFetch('/devices/push-alive', {
+        method: 'POST',
+        token: accessToken,
+      }).catch(() => undefined);
+    };
+
+    ping();
+    const heartbeat = setInterval(ping, 30_000);
+
     const onChange = (next: AppStateStatus) => {
       if (next === 'active') {
         postPresence(accessToken, true);
@@ -42,7 +52,10 @@ export function FindrPresenceLifecycle() {
 
     postPresence(accessToken, true);
     const sub = AppState.addEventListener('change', onChange);
-    return () => sub.remove();
+    return () => {
+      clearInterval(heartbeat);
+      sub.remove();
+    };
   }, [accessToken]);
 
   return null;

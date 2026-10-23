@@ -2,7 +2,7 @@
   "expo": {
     "name": "Findr",
     "slug": "findr",
-    "version": "0.1.7",
+    "version": "0.1.8",
     "icon": "./assets/images/findr-logo.png",
     "scheme": "findr",
     "userInterfaceStyle": "dark",
@@ -17,7 +17,7 @@
     "android": {
       "package": "app.findr.mobile",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 61,
+      "versionCode": 62,
       "intentFilters": [
         {
           "action": "VIEW",

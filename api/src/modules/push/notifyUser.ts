@@ -13,6 +13,13 @@ export async function notifyUserPush(
     console.warn('[findr-push] no expo push tokens for user', userId);
     return;
   }
+  console.info(
+    '[findr-push] sending',
+    tokens.length,
+    'token(s) to user',
+    userId,
+    title,
+  );
   await sendExpoPush(tokens, {
     title,
     body,

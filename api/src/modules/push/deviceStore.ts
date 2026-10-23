@@ -6,12 +6,7 @@ class MemoryDeviceStore {
   private byUser = new Map<string, Set<string>>();
 
   async upsert(userId: string, expoPushToken: string): Promise<void> {
-    let set = this.byUser.get(userId);
-    if (!set) {
-      set = new Set();
-      this.byUser.set(userId, set);
-    }
-    set.add(expoPushToken);
+    this.byUser.set(userId, new Set([expoPushToken]));
   }
 
   async listTokens(userId: string): Promise<string[]> {
@@ -33,6 +28,12 @@ class PostgresDeviceStore {
        ON CONFLICT (user_id, expo_push_token)
        DO UPDATE SET updated_at = NOW(), platform = EXCLUDED.platform`,
       [userId, expoPushToken, platform],
+    );
+    // One active device token per user (reinstalls were stacking stale Expo tokens).
+    await this.pool.query(
+      `DELETE FROM push_devices
+       WHERE user_id = $1 AND expo_push_token <> $2`,
+      [userId, expoPushToken],
     );
   }
 

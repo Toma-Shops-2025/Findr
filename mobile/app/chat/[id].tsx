@@ -581,58 +581,65 @@ export default function ChatThreadScreen() {
         <Text style={styles.typing}>Typing…</Text>
       ) : null}
       <View style={styles.composer}>
-        <Pressable
-          style={[styles.toolBtn, sending && styles.sendDisabled]}
-          onPress={openAttachMenu}
-          disabled={sending}
-          accessibilityLabel="Attach photo, video, or location"
-        >
-          <Text style={styles.toolBtnText}>Attach</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.toolBtn, sending && styles.sendDisabled]}
-          onPress={openAlbum}
-          disabled={sending}
-          accessibilityLabel="Open Findr album"
-        >
-          <Text style={styles.toolBtnText}>Album</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.toolBtn, sending && styles.sendDisabled]}
-          onPress={openCallsMenu}
-          disabled={sending}
-          accessibilityLabel="Voice or video call coming soon"
-        >
-          <Text style={styles.toolBtnTextWhite}>Call</Text>
-        </Pressable>
-        <TextInput
-          placeholder="Chat"
-          placeholderTextColor={colors.mist}
-          style={styles.input}
-          value={draft}
-          onChangeText={(text) => {
-            setDraft(text);
-            if (!id) return;
-            realtimeRef.current?.sendTyping(id, true);
-            if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-            typingTimerRef.current = setTimeout(() => {
-              realtimeRef.current?.sendTyping(id, false);
-            }, 1200);
-          }}
-          editable={!sending}
-          multiline
-          maxLength={2000}
-        />
-        <Pressable
-          style={[
-            styles.send,
-            (!draft.trim() || sending) && styles.sendDisabled,
-          ]}
-          onPress={onSend}
-          disabled={!draft.trim() || sending}
-        >
-          <Text style={styles.sendText}>{sending ? '...' : 'Send'}</Text>
-        </Pressable>
+        <View style={styles.toolRow}>
+          <Pressable
+            style={[styles.toolBtn, sending && styles.sendDisabled]}
+            onPress={openAttachMenu}
+            disabled={sending}
+            accessibilityLabel="Attach photo, video, or location"
+          >
+            <Text style={styles.toolBtnText}>Attach</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.toolBtn, sending && styles.sendDisabled]}
+            onPress={openAlbum}
+            disabled={sending}
+            accessibilityLabel="Open Findr album"
+          >
+            <Text style={styles.toolBtnText}>Album</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.toolBtn, sending && styles.sendDisabled]}
+            onPress={openCallsMenu}
+            disabled={sending}
+            accessibilityLabel="Voice or video call coming soon"
+          >
+            <Text style={styles.toolBtnTextWhite}>Call</Text>
+          </Pressable>
+        </View>
+        <View style={styles.messageRow}>
+          <TextInput
+            placeholder="Message"
+            placeholderTextColor={colors.mistMuted}
+            style={styles.input}
+            value={draft}
+            onChangeText={(text) => {
+              setDraft(text);
+              if (!id) return;
+              realtimeRef.current?.sendTyping(id, true);
+              if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+              typingTimerRef.current = setTimeout(() => {
+                realtimeRef.current?.sendTyping(id, false);
+              }, 1200);
+            }}
+            editable={!sending}
+            multiline
+            maxLength={2000}
+            textAlignVertical="center"
+            accessibilityLabel="Message text"
+          />
+          <Pressable
+            style={[
+              styles.send,
+              (!draft.trim() || sending) && styles.sendDisabled,
+            ]}
+            onPress={onSend}
+            disabled={!draft.trim() || sending}
+            accessibilityLabel="Send message"
+          >
+            <Text style={styles.sendText}>{sending ? '…' : 'Send'}</Text>
+          </Pressable>
+        </View>
       </View>
       <View
         nativeID="chatAdReservedBand"
@@ -924,22 +931,30 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   composer: {
-    flexDirection: 'row',
     gap: spacing.sm,
-    alignItems: 'flex-end',
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm + 2,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.sm,
     backgroundColor: colors.ink,
+  },
+  toolRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  messageRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: spacing.sm,
   },
   toolBtn: {
     backgroundColor: colors.inkElevated,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.md,
-    paddingHorizontal: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
   },
   toolBtnText: {
@@ -954,29 +969,36 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
+    minHeight: 52,
     backgroundColor: colors.inkElevated,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md + 2,
+    paddingTop: Platform.OS === 'ios' ? 14 : 12,
+    paddingBottom: Platform.OS === 'ios' ? 14 : 12,
     color: colors.mist,
     fontFamily: typography.body,
-    maxHeight: 120,
+    fontSize: 18,
+    lineHeight: 24,
+    maxHeight: 160,
   },
   send: {
+    minHeight: 52,
+    minWidth: 72,
     backgroundColor: colors.coral,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sendDisabled: {
-    opacity: 0.5,
+    opacity: 0.45,
   },
   sendText: {
     fontFamily: typography.heading,
     color: colors.ink,
-    fontSize: 14,
+    fontSize: 16,
   },
   /** Named placeholder for future ads -- no third-party SDK in Stage 2d. */
   adReservedBand: {

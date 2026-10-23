@@ -9,8 +9,13 @@ import {
 } from 'react';
 import { InteractionManager } from 'react-native';
 
+import { FindrPresenceLifecycle } from '@/components/FindrPresenceLifecycle';
 import { GoogleAuthSessionHandler } from '@/components/GoogleAuthSessionHandler';
 import { PushNotificationHandler } from '@/components/PushNotificationHandler';
+import {
+  clearGridRevokeSecret,
+  saveGridRevokeSecret,
+} from '@/lib/gridRevoke';
 import { EPHEMERAL_SESSION } from '@/lib/ephemeralSession';
 import { GoogleAuthProvider } from '@/lib/googleAuthContext';
 import {
@@ -164,12 +169,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const persistSession = useCallback(async (data: AuthSession) => {
+  const persistSession = useCallback(
+    async (data: AuthSession & { gridRevokeSecret?: string }) => {
     // Paint logged-in UI immediately; storage + push must not block OAuth finish.
     setSession(data);
     try {
       await clearSession();
       await saveSession(data, { persist: false });
+      if (data.gridRevokeSecret) {
+        await saveGridRevokeSecret(data.user.id, data.gridRevokeSecret);
+      }
     } catch (err) {
       console.warn('Findr session persist failed', err);
     }
@@ -178,10 +187,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch((err) => {
         console.warn('Findr push registration skipped', err);
       });
-  }, []);
+  },
+  [],
+  );
 
   const signup = useCallback(async (input: SignupInput) => {
-    const data = await apiFetchLazy<AuthSession>('/auth/signup', {
+    const data = await apiFetchLazy<AuthSession & { gridRevokeSecret?: string }>('/auth/signup', {
       method: 'POST',
       body: JSON.stringify(input),
     });
@@ -190,7 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (input: LoginInput) => {
     const { email, password } = input;
-    const data = await apiFetchLazy<AuthSession>('/auth/login', {
+    const data = await apiFetchLazy<AuthSession & { gridRevokeSecret?: string }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
@@ -198,7 +209,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [persistSession]);
 
   const loginWithGoogle = useCallback(async (idToken: string) => {
-    const data = await apiFetchLazy<AuthSession>('/auth/google', {
+    const data = await apiFetchLazy<AuthSession & { gridRevokeSecret?: string }>('/auth/google', {
       method: 'POST',
       body: JSON.stringify({
         idToken,
@@ -227,6 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Client still clears local session.
     }
     await clearSession();
+    await clearGridRevokeSecret();
     setSession(null);
   }, [session?.accessToken]);
 
@@ -249,6 +261,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={value}>
       <GoogleAuthProvider>
         <GoogleAuthSessionHandler />
+        <FindrPresenceLifecycle />
         <PushNotificationHandler />
         {children}
       </GoogleAuthProvider>

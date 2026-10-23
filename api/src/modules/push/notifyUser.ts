@@ -8,9 +8,12 @@ export async function notifyUserPush(
   data?: Record<string, string>,
 ): Promise<void> {
   const devices = await getDeviceStore();
-  const tokens = await devices.listTokens(userId);
+  const tokens = await devices.listDeliverableTokens(userId);
   if (tokens.length === 0) {
-    console.warn('[findr-push] no expo push tokens for user', userId);
+    console.warn(
+      '[findr-push] no deliverable push tokens (app closed or stale heartbeat)',
+      userId,
+    );
     return;
   }
   console.info(

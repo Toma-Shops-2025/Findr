@@ -23,6 +23,10 @@ Google sign-in is **production-critical**. Before merging mobile auth changes:
 2. Force-close app → **Continue with Google** on login → `POST /auth/google` **200** in Render logs.
 3. Email login still works.
 
+## Android AAB (Play)
+
+- **Bump `mobile/app.json` `android.versionCode` before every GitHub AAB build** (Play rejects reused codes). See **`docs/android-aab-release.md`**.
+
 ## Other checks
 
 - **`npm run test:oauth`** in `mobile/` on every PR that touches `mobile/lib/google*` or `mobile/lib/auth.tsx`.

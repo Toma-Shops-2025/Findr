@@ -28,6 +28,15 @@ export const deviceRoutes: FastifyPluginAsync = async (app) => {
       parsed.data.expoPushToken,
       parsed.data.platform ?? 'android',
     );
+    await store.touchAlive(auth.userId);
+    return { ok: true };
+  });
+
+  app.post('/push-alive', async (req, reply) => {
+    const auth = await requireAuth(req, reply);
+    if (!auth) return;
+    const store = await getDeviceStore();
+    await store.touchAlive(auth.userId);
     return { ok: true };
   });
 

@@ -15,6 +15,7 @@ import {
   requestPasswordReset,
 } from '../modules/auth/passwordReset.js';
 import { getLocationStore } from '../modules/geo/locationStore.js';
+import { getDeviceStore } from '../modules/push/deviceStore.js';
 import { getProfileStore } from '../modules/profiles/profileStore.js';
 
 const signupSchema = z.object({
@@ -37,6 +38,18 @@ const loginSchema = z.object({
 
 function errorCode(err: unknown): string | undefined {
   return (err as { code?: string })?.code;
+}
+
+async function issueAuthSession(
+  store: Awaited<ReturnType<typeof getUserStore>>,
+  user: import('../modules/auth/userStore.js').PublicUser,
+) {
+  const accessToken = await signAccessToken({
+    sub: user.id,
+    email: user.email,
+  });
+  const gridRevokeSecret = await store.rotateGridRevokeSecret(user.id);
+  return { accessToken, user, gridRevokeSecret };
 }
 
 /**
@@ -73,11 +86,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
           : {}),
       };
       const user = await store.create(signupInput);
-      const accessToken = await signAccessToken({
-        sub: user.id,
-        email: user.email,
-      });
-      return reply.code(201).send({ accessToken, user });
+      return reply.code(201).send(await issueAuthSession(store, user));
     } catch (err) {
       const code = errorCode(err);
       if (code === 'email_taken') {
@@ -114,11 +123,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(401).send({ error: 'invalid_credentials' });
     }
 
-    const accessToken = await signAccessToken({
-      sub: user.id,
-      email: user.email,
-    });
-    return { accessToken, user: toPublic(user) };
+    return issueAuthSession(store, toPublic(user));
   });
 
   app.post('/forgot-password', async (req, reply) => {
@@ -183,11 +188,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         tosAccepted: true,
         privacyAccepted: true,
       });
-      const accessToken = await signAccessToken({
-        sub: user.id,
-        email: user.email,
-      });
-      return { accessToken, user };
+      return issueAuthSession(store, user);
     } catch (err) {
       const code = errorCode(err);
       if (code === 'email_taken') {
@@ -201,11 +202,31 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  app.post('/presence', async (req, reply) => {
+    const auth = await requireAuth(req, reply);
+    if (!auth) return;
+    const parsed = z.object({ active: z.boolean() }).safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'invalid_body' });
+    }
+    const profiles = await getProfileStore();
+    if (parsed.data.active) {
+      await profiles.touchActive(auth.userId);
+    } else {
+      await profiles.clearActive(auth.userId);
+    }
+    return { ok: true };
+  });
+
   app.post('/logout', async (req, reply) => {
     const auth = await requireAuth(req, reply);
     if (!auth) return;
     const profiles = await getProfileStore();
     await profiles.clearActive(auth.userId);
+    const { store: locations } = await getLocationStore();
+    await locations.remove(auth.userId);
+    const devices = await getDeviceStore();
+    await devices.removeAllForUser(auth.userId);
     return reply.send({ ok: true });
   });
 

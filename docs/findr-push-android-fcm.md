@@ -63,6 +63,16 @@ node ..\db\scripts\list-push-tokens.mjs soberdrivertaxi@gmail.com
 
 3. Test with the receiver app **swiped away** from recents (not only Home). Some devices still deliver with Home, but full swipe rules out “app still polling” confusion.
 
+## When push fires
+
+| App state | Green dot | Nearby | Chat push |
+|-----------|-----------|--------|-----------|
+| Foreground (using app) | On | Yes | Optional (usually in chat) |
+| In **recents** (background) | Off | Yes | **Yes** — token stays registered |
+| **Swiped away** (closed) | Off | No (after next open revokes grid) | **No** — heartbeat stops (~2 min), tokens cleared on revoke |
+
+While the app process is alive (including **recents**), the app pings **`POST /devices/push-alive`** every 30s so chat pushes still work. After swipe-away, pings stop and the server stops delivering within about **2 minutes** (no long grace period).
+
 ## Stale tokens after reinstalls
 
 The API keeps **one push token per user** (latest register wins). To clean old rows already in Postgres:

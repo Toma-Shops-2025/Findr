@@ -76,6 +76,32 @@ function fallbackDisplayName(email: string): string {
  * otherwise uses an in-memory haversine fallback (response.mode = "memory").
  */
 export const geoRoutes: FastifyPluginAsync = async (app) => {
+  /** Leave Nearby after the app process ends (no JWT; secret issued at login). */
+  app.post('/revoke-grid', async (req, reply) => {
+    const parsed = z
+      .object({
+        userId: z.string().uuid(),
+        gridRevokeSecret: z.string().uuid(),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'invalid_body' });
+    }
+    const users = await getUserStore();
+    const ok = await users.verifyGridRevokeSecret(
+      parsed.data.userId,
+      parsed.data.gridRevokeSecret,
+    );
+    if (!ok) {
+      return reply.code(404).send({ error: 'invalid_or_expired' });
+    }
+    const { store } = await getLocationStore();
+    await store.remove(parsed.data.userId);
+    const profiles = await getProfileStore();
+    await profiles.clearActive(parsed.data.userId);
+    return { ok: true };
+  });
+
   app.post('/location', async (req, reply) => {
     const auth = await requireAuth(req, reply);
     if (!auth) return;

@@ -186,6 +186,24 @@ class MemoryUserStore {
     user.passwordHash = await bcrypt.hash(password, 10);
     return true;
   }
+
+  private gridRevokeByUser = new Map<string, string>();
+
+  async rotateGridRevokeSecret(userId: string): Promise<string> {
+    const secret = crypto.randomUUID();
+    this.gridRevokeByUser.set(userId, secret);
+    return secret;
+  }
+
+  async verifyGridRevokeSecret(
+    userId: string,
+    secret: string,
+  ): Promise<boolean> {
+    const expected = this.gridRevokeByUser.get(userId);
+    if (!expected || expected !== secret) return false;
+    this.gridRevokeByUser.delete(userId);
+    return true;
+  }
 }
 
 class PostgresUserStore {
@@ -374,6 +392,37 @@ class PostgresUserStore {
       `UPDATE users SET password_hash = $2, updated_at = now()
        WHERE id = $1 AND deleted_at IS NULL`,
       [userId, passwordHash],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async rotateGridRevokeSecret(userId: string): Promise<string> {
+    const result = await this.pool.query(
+      `UPDATE users
+       SET grid_revoke_secret = gen_random_uuid(), updated_at = now()
+       WHERE id = $1 AND deleted_at IS NULL
+       RETURNING grid_revoke_secret`,
+      [userId],
+    );
+    const row = result.rows[0];
+    if (!row?.grid_revoke_secret) {
+      throw Object.assign(new Error('user_not_found'), { code: 'user_not_found' });
+    }
+    return String(row.grid_revoke_secret);
+  }
+
+  async verifyGridRevokeSecret(
+    userId: string,
+    secret: string,
+  ): Promise<boolean> {
+    const result = await this.pool.query(
+      `UPDATE users
+       SET grid_revoke_secret = NULL, updated_at = now()
+       WHERE id = $1
+         AND deleted_at IS NULL
+         AND grid_revoke_secret = $2::uuid
+       RETURNING id`,
+      [userId, secret],
     );
     return (result.rowCount ?? 0) > 0;
   }

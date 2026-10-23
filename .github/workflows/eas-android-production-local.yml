@@ -1,4 +1,5 @@
 # Build production Android AAB on Linux (free GitHub runners).
+# Before running: bump mobile/app.json android.versionCode (see docs/android-aab-release.md).
 # Does NOT use EAS cloud build quota (--local runs on the runner).
 # Requires repo secret EXPO_TOKEN (https://expo.dev/settings/access-tokens).
 

@@ -16,6 +16,10 @@ class MemoryDeviceStore {
   async remove(userId: string, expoPushToken: string): Promise<void> {
     this.byUser.get(userId)?.delete(expoPushToken);
   }
+
+  async removeAllForUser(userId: string): Promise<void> {
+    this.byUser.delete(userId);
+  }
 }
 
 class PostgresDeviceStore {
@@ -50,6 +54,12 @@ class PostgresDeviceStore {
       `DELETE FROM push_devices WHERE user_id = $1 AND expo_push_token = $2`,
       [userId, expoPushToken],
     );
+  }
+
+  async removeAllForUser(userId: string): Promise<void> {
+    await this.pool.query(`DELETE FROM push_devices WHERE user_id = $1`, [
+      userId,
+    ]);
   }
 }
 

@@ -11,6 +11,7 @@ import { getProfileStore } from '../modules/profiles/profileStore.js';
 import { isFreeToMeetActive } from '../modules/profiles/types.js';
 import { getBlockStore } from '../modules/safety/blockStore.js';
 import { getFavoriteStore } from '../modules/geo/favoriteStore.js';
+import { getDeviceStore } from '../modules/push/deviceStore.js';
 import {
   demoNearbyCards,
   shouldIncludeDemoNearby,
@@ -99,6 +100,8 @@ export const geoRoutes: FastifyPluginAsync = async (app) => {
     await store.remove(parsed.data.userId);
     const profiles = await getProfileStore();
     await profiles.clearActive(parsed.data.userId);
+    const devices = await getDeviceStore();
+    await devices.removeAllForUser(parsed.data.userId);
     return { ok: true };
   });
 

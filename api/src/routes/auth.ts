@@ -15,6 +15,7 @@ import {
   requestPasswordReset,
 } from '../modules/auth/passwordReset.js';
 import { getLocationStore } from '../modules/geo/locationStore.js';
+import { getDeviceStore } from '../modules/push/deviceStore.js';
 import { getProfileStore } from '../modules/profiles/profileStore.js';
 
 const signupSchema = z.object({
@@ -224,6 +225,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     await profiles.clearActive(auth.userId);
     const { store: locations } = await getLocationStore();
     await locations.remove(auth.userId);
+    const devices = await getDeviceStore();
+    await devices.removeAllForUser(auth.userId);
     return reply.send({ ok: true });
   });
 

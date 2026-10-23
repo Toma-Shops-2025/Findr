@@ -63,6 +63,16 @@ node ..\db\scripts\list-push-tokens.mjs soberdrivertaxi@gmail.com
 
 3. Test with the receiver app **swiped away** from recents (not only Home). Some devices still deliver with Home, but full swipe rules out “app still polling” confusion.
 
+## When push fires
+
+| App state | Green dot | Nearby | Chat push |
+|-----------|-----------|--------|-----------|
+| Foreground (using app) | On | Yes | Optional (usually in chat) |
+| In **recents** (background) | Off | Yes | **Yes** — token stays registered |
+| **Swiped away** (closed) | Off | No (after next open revokes grid) | **No** — tokens cleared on grid revoke / logout |
+
+No extra “5 minute grace” after close — pushes stop once the app process ends and cold-start revoke runs.
+
 ## Stale tokens after reinstalls
 
 The API keeps **one push token per user** (latest register wins). To clean old rows already in Postgres:

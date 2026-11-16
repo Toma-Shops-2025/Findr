@@ -10,9 +10,8 @@ import {
   View,
 } from 'react-native';
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
-
 import { colors, radii, spacing } from '@/constants/theme';
+import { launchFindrImageLibraryAsync } from '@/lib/pickFromMediaLibrary';
 import {
   apiDeleteAlbumItem,
   apiFetch,
@@ -131,20 +130,18 @@ export default function AlbumScreen() {
       );
       return;
     }
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert(
-        'Library access needed',
-        'Allow Findr to pick media for your Findr album. Copied into Findr only -- not re-saved to your gallery.',
-      );
-      return;
-    }
-    const picked = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.8,
-      allowsEditing: false,
-    });
-    if (picked.canceled || !picked.assets?.[0]?.uri) return;
+    const picked = await launchFindrImageLibraryAsync(
+      {
+        mediaTypes: ['images'],
+        quality: 0.8,
+        allowsEditing: false,
+      },
+      {
+        title: 'Library access needed',
+        body: 'Allow Findr to pick media for your Findr album. Copied into Findr only — not saved to your phone gallery.',
+      },
+    );
+    if (!picked || picked.canceled || !picked.assets?.[0]?.uri) return;
     const asset = picked.assets[0];
     setBusy(true);
     try {

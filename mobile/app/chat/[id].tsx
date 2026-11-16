@@ -16,8 +16,8 @@ import {
 } from 'react-native';
 import { Stack, router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
+import { launchFindrImageLibraryAsync } from '@/lib/pickFromMediaLibrary';
 import { useVideoPlayer, VideoView, type VideoView as VideoViewType } from 'expo-video';
 
 import { colors, radii, spacing, typography } from '@/constants/theme';
@@ -308,20 +308,18 @@ export default function ChatThreadScreen() {
 
   const onPickPhoto = async () => {
     if (!accessToken || !id || sending) return;
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert(
-        'Library access needed',
-        'Allow Findr to pick a photo to send. It is uploaded to Findr only — not saved to your phone gallery.',
-      );
-      return;
-    }
-    const picked = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.8,
-      allowsEditing: false,
-    });
-    if (picked.canceled || !picked.assets?.[0]?.uri) return;
+    const picked = await launchFindrImageLibraryAsync(
+      {
+        mediaTypes: ['images'],
+        quality: 0.8,
+        allowsEditing: false,
+      },
+      {
+        title: 'Library access needed',
+        body: 'Allow Findr to pick a photo to send. It is uploaded to Findr only — not saved to your phone gallery.',
+      },
+    );
+    if (!picked || picked.canceled || !picked.assets?.[0]?.uri) return;
     const asset = picked.assets[0];
     await uploadAndSendMedia(
       asset.uri,

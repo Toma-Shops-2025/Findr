@@ -12,9 +12,8 @@ import {
 } from 'react-native';
 import { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
-
 import { colors, radii, spacing, typography } from '@/constants/theme';
+import { launchFindrImageLibraryAsync } from '@/lib/pickFromMediaLibrary';
 import { apiFetch, apiUploadImage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { AdPlaceholderBand } from '@/components/AdPlaceholderBand';
@@ -138,21 +137,19 @@ export default function ProfileScreen() {
       );
       return;
     }
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert(
-        'Photo access needed',
-        'Allow Findr to access your photos to set a profile picture.',
-      );
-      return;
-    }
-    const picked = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.85,
-      allowsEditing: true,
-      aspect: [3, 4],
-    });
-    if (picked.canceled || !picked.assets?.[0]?.uri) return;
+    const picked = await launchFindrImageLibraryAsync(
+      {
+        mediaTypes: ['images'],
+        quality: 0.85,
+        allowsEditing: true,
+        aspect: [3, 4],
+      },
+      {
+        title: 'Photo access needed',
+        body: 'Allow Findr to access your photos to set a profile picture.',
+      },
+    );
+    if (!picked || picked.canceled || !picked.assets?.[0]?.uri) return;
 
     setUploading(true);
     setError(null);

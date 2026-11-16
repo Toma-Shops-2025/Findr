@@ -25,6 +25,12 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
+      - name: Setup Java 17 for Gradle (CMake / react-native-worklets)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - name: Setup EAS
         uses: expo/expo-github-action@v8
         with:
@@ -48,7 +54,7 @@ jobs:
       - name: EAS local production build
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8 --add-opens=java.base/java.lang=ALL-UNNAMED
           JAVA_TOOL_OPTIONS: -Xmx4g
         run: eas build -p android --profile production --local --non-interactive
 

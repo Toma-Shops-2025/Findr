@@ -14,4 +14,8 @@ if (fromEnv) {
   );
 }
 
-module.exports = appJson;
+/** @param {{ config: import('expo/config').ExpoConfig }} opts */
+module.exports = ({ config }) => ({
+  ...config,
+  ...appJson.expo,
+});
